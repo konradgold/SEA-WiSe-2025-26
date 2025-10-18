@@ -59,3 +59,4 @@ class Injestion:
 
         if batch_count > 0:
             pipeline.execute()
+        print(f"There are now {self.db.dbsize()} documents in the database.")
