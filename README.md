@@ -19,5 +19,5 @@ Recommended: Use .env file for redis port/path to documents
 
 Ingest documents naively using:
 ```python
-uv run main.py [--batch_size 500 --documents-path "..." --redis_port xyz]
+uv run ingestion.py [--batch_size 500 --documents-path "..." --redis_port xyz]
 ```
