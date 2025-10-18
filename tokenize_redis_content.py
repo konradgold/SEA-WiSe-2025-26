@@ -26,6 +26,7 @@ def main():
     db = connect_to_db("localhost", redis_port)
     pipe = db.pipeline()
     keys = [k for k in db.keys() if not k.startswith('token:')]
+    corr = 0
     for key in keys:
         try:
             content = db.get(key)
@@ -50,8 +51,9 @@ def main():
 
             doc_field = {key: token_counts[token]}  # ensure `key` is str
             pipe.json().merge(token_key, Path("$.documents"), doc_field)
-    result = pipe.execute()
-    print(f"Number of correct tokenizations: {sum(result)}")
+        result = pipe.execute()
+        corr += result.count(True)
+    print(f"Number of correct tokenizations: {corr}")
 
     db.close()
 
