@@ -36,7 +36,7 @@ def search_documents(redis_client, query):
 
 def main():
     redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
     
     while True:
         print("\nEnter your search query (or 'quit' to exit):")

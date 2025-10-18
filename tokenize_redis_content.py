@@ -18,7 +18,7 @@ def main():
                       help='Redis server port')
     args = parser.parse_args()
 
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
 
 
     redis_port = args.redis_port
