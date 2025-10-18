@@ -26,9 +26,9 @@ class MinimalProcessor(Processor):
             Columns.body.value: document[3],
         })
 
-class Injestion:
+class Ingestion:
     """
-    Injest documents into the database
+    Ingest documents into the database
     Idea: Chain processors that are parsed via list
     """
     def __init__(self, db, processors: list[Processor], document_path:str):
@@ -37,7 +37,7 @@ class Injestion:
         self.processors = processors
         self.document_path = document_path
 
-    def injest(self, batch_size: int = 1000):
+    def ingest(self, batch_size: int = 1000):
         pipeline = self.db.pipeline()
         with open(self.document_path, "r") as f:
             batch_count = 0
@@ -84,7 +84,8 @@ def main():
     redis_port = args.redis_port
 
     db = connect_to_db("localhost", redis_port)
-    injestion = Injestion(db, [MinimalProcessor()], documents_path)
-    injestion.injest(args.batch_size)
+    ingestion = Ingestion(db, [MinimalProcessor()], documents_path)
+    ingestion.ingest(args.batch_size)
+    db.close()
 
 main()

@@ -1,8 +1,9 @@
 import json
 import redis
 import sys
-from dotenv import load_dotenv
 import os
+from transformers import AutoTokenizer
+from redis.commands.json.path import Path
 
 
 def connect_to_redis(host='localhost', port=6379):
@@ -18,37 +19,47 @@ def connect_to_redis(host='localhost', port=6379):
 def search_documents(redis_client, query):
     # This assumes documents are stored with keys like 'doc:1', 'doc:2', etc.
     # and contain text content
-    matches = []
-    for key in redis_client.keys():
-        content = redis_client.get(key)
-        content_json = json.loads(content)
-        if query.lower() in content_json.get("body", "").lower():
-            matches.append((key, content_json["title"], content_json["link"]))
-    return matches
+    matches = set()
+    keys = ["token:" + str(token) for token in query]
+    for key in  keys:
+        print(key)
+        content = redis_client.json().get(key, Path.root_path())
+        matches.intersection_update(content.get("documents", {}).keys()) if matches else matches.update(content.get("documents", {}).keys())
+    if matches:
+        out_matches = []
+        for match in matches:
+            doc_content = redis_client.get(match)
+            if doc_content:
+                doc_json = json.loads(doc_content)
+                out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
+        return out_matches
 
 def main():
     redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
     
     while True:
         print("\nEnter your search query (or 'quit' to exit):")
-        query = input("> ").strip()
-        
+        query = input("> ")
         if query.lower() == 'quit':
             break
-        
         if not query:
             continue
-            
+
+        query = tokenizer.encode(query)
+        
+        
         results = search_documents(redis_client, query)
         
         if results:
-            print(f"\nFound {len(results)} matches:")
             for key, title, link in results:
                 print(f"\n{key}:")
                 print(title)
                 print(link)
+            print(f"\nFound {len(results)} matches")
         else:
             print("\nNo matches found.")
+        print(f"Tokenized query: {query}")
 
 if __name__ == "__main__":
     try:
