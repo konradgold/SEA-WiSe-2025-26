@@ -47,7 +47,7 @@ class Ingestion:
                 if len(doc) != 4:
                     continue
                 for processor in self.processors:
-                    doc_id, doc = processor.process(id, doc)
+                    doc_id, doc = processor.process(doc_id, doc)
                 pipeline.setnx(doc_id, doc)
                 batch_count += 1
 
