@@ -1,11 +1,7 @@
 # .github/workflows/test.yml
 name: UV Python Tests
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: ["push"]
 
 jobs:
   test:
