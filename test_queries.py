@@ -52,7 +52,8 @@ class TestQueryEngine(unittest.TestCase):
         operator_class = Operators.get_EnumOperator("c.a.t")
         self.assertEqual(operator_class, Operators.TERM)
 
-
+    def test_false(self):
+        self.assertEqual(1, 2)
 
     def test_DEMO_for_execution(self):
         engine = QueryEngine()
