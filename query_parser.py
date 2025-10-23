@@ -49,7 +49,7 @@ class Operators(Enum):
         return self._process_func(idx, query_elements)
 
     @classmethod
-    def get_EnumOperator(cls, identifier: str) -> Operators:
+    def get_EnumOperator(cls, identifier: str) -> "Operators":
         id_ = identifier.lower()
         for member in cls:
             if id_ in member.identifiers:

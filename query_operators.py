@@ -14,7 +14,7 @@ class TermOperator(AbstractOperator):
         '''
         This just searches for the phrase
         '''
-        print(f"Searchign for term: {self.phrase}")
+        print(f"Searching for term: {self.phrase}")
         return {f"ID-{self.phrase}"}
 
 class PhraseOperator(AbstractOperator):
