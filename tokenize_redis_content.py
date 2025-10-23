@@ -1,11 +1,14 @@
 import argparse
 from dotenv import load_dotenv
 import os
-from transformers import GPT2Tokenizer
 from redis.commands.json.path import Path
 import redis
 import json
 from transformers import AutoTokenizer
+
+class TokenizerAbstract:
+    def tokenize(self, text: str) -> list[int]:
+        raise NotImplementedError("Subclasses should implement this method.")
 
 def connect_to_db(host: str, port: int):
     # Placeholder for database connection logic
