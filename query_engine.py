@@ -9,7 +9,7 @@ class QueryEngine:
         '''
         phrase_elements = phrase.lower().split(" ")
 
-        parsing_order = [Operators.TERM, Operators.AND, Operators.ANDNOT,  Operators.OR]   
+        parsing_order = [Operators.PHRASE, Operators.TERM, Operators.AND, Operators.ANDNOT,  Operators.OR]   
         for current_operator in parsing_order:
             idx = 0
             while len(phrase_elements) > idx:

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Callable, List, NamedTuple
 
-from query_operators import ANDNOTOperator, ANDOperator, AbstractOperator, OROperator, TermOperator
+from query_operators import ANDNOTOperator, ANDOperator, AbstractOperator, OROperator, TermOperator, PhraseOperator
 
 
 class OperatorSpec(NamedTuple):
@@ -30,6 +30,18 @@ def parse_self(idx: int, query_elements: List[str | AbstractOperator]) -> List [
     query_elements[idx] = clazz(query_elements[idx])
     return query_elements
 
+def parse_phrase(idx_start: int, query_elements: List[str | AbstractOperator]) -> List [str | AbstractOperator]:
+    for idx_end in range(idx_start + 1, len(query_elements)):
+        element = query_elements[idx_end]
+        if isinstance(element, str) and "'" in element:
+            break
+    phrase = " ".join(query_elements[idx_start:idx_end+1])
+    query_elements[idx_start] = PhraseOperator(phrase)
+    # remove used elements
+    for _ in range(idx_end - idx_start):
+        query_elements.pop(idx_start + 1)
+    return query_elements
+
 # Identify operators based on their string representation
 # [is_terminal] indicates if a operator is atomic / a leaf in the query tree
 class Operators(Enum):
@@ -38,6 +50,7 @@ class Operators(Enum):
     OR     = OperatorSpec(("or", "|", "||"), OROperator,      False, parse_pre_and_post)
     # has no identifiers, as any unrecognized token is treated as a TERM
     TERM   = OperatorSpec((),                 TermOperator,    True,  parse_self)
+    PHRASE = OperatorSpec(("'",),                 PhraseOperator,  True,  parse_phrase)
 
     def __init__(self, identifiers, operator_cls, is_terminal, parsing_strategy):
         self.identifiers   = identifiers
@@ -53,6 +66,8 @@ class Operators(Enum):
         id_ = identifier.lower()
         for member in cls:
             if id_ in member.identifiers:
+                return member
+            if member == cls.PHRASE and id_.startswith("'"):
                 return member
         return cls.TERM
 
