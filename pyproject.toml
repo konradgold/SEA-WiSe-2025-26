@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "dotenv>=0.9.9",
+    "python-dotenv>=0.9.9",
     "pandas>=2.3.3",
     "redis>=6.4.0",
     "spacy[apple]>=3.8.7",

@@ -19,8 +19,7 @@ def connect_to_redis(host='localhost', port=6379):
 
 @perf_indicator("search", "queries")
 def search_documents(redis_client, query):
-    # This assumes documents are stored with keys like 'doc:1', 'doc:2', etc.
-    # and contain text content
+    # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
     matches = None  
     keys = ["token:" + str(token) for token in query]
     for key in keys:

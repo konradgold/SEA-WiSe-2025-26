@@ -249,7 +249,7 @@ def _normalize_token(token: str, cfg: TokenizerConfig) -> str:
 def _simple_stem(token: str) -> str:
     # Minimal suffix stripping to avoid extra dependencies
     s = token
-    for suf in ("ing", "edly", "edly", "ed", "ly", "es", "s"):
+    for suf in ("ing", "edly", "ed", "ly", "es", "s"):
         if len(s) > 3 and s.endswith(suf):
             s = s[: -len(suf)]
             break

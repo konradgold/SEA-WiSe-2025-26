@@ -22,7 +22,7 @@ def _tokenize_doc(payload):
     return key, tok.tokenize(body)
 
 def connect_to_db(host: str, port: int):
-    # Placeholder for database connection logic
+    # Create a Redis client
     return redis.Redis(host=host, port=port, decode_responses=True)
 
 
@@ -74,6 +74,8 @@ def main():
         if args.workers > 1
         else None
     )
+    print(f"Using {args.workers} workers")
+
     # Iterate docs efficiently without blocking Redis
     def iter_doc_keys():
         for redis_key in db.scan_iter(match="D*", count=args.scan_count):
