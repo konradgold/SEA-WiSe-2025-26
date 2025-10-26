@@ -2,8 +2,7 @@ import json
 import redis
 import sys
 import os
-from transformers import AutoTokenizer
-from redis.commands.json.path import Path
+from tokenization import get_tokenizer
 
 
 def connect_to_redis(host='localhost', port=6379):
@@ -23,8 +22,13 @@ def search_documents(redis_client, query):
     keys = ["token:" + str(token) for token in query]
     for key in  keys:
         print(key)
-        content = redis_client.json().get(key, Path.root_path())
-        matches.intersection_update(content.get("documents", {}).keys()) if matches else matches.update(content.get("documents", {}).keys())
+        # Hash postings: field = doc_id, value = tf
+        postings = redis_client.hgetall(key)
+        if not postings:
+            # No postings list for this token; intersect to empty set
+            matches = set() if matches else matches
+            continue
+        matches.intersection_update(postings.keys()) if matches else matches.update(postings.keys())
     if matches:
         out_matches = []
         for match in matches:
@@ -34,9 +38,12 @@ def search_documents(redis_client, query):
                 out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
         return out_matches
 
+ 
+
+
 def main():
     redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
-    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
+    tokenizer = get_tokenizer(os.getenv("TOKENIZER_BACKEND"))
     
     while True:
         print("\nEnter your search query (or 'quit' to exit):")
@@ -46,7 +53,7 @@ def main():
         if not query:
             continue
 
-        query = tokenizer.encode(query)
+        query = tokenizer.tokenize(query)
         
         
         results = search_documents(redis_client, query)
