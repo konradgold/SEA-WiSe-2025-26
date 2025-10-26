@@ -5,6 +5,7 @@ import argparse
 import redis
 from dotenv import load_dotenv
 import os
+from perf.simple_perf import perf_indicator
 
 class Columns(enum.Enum):
     doc_id = "doc_id"
@@ -16,7 +17,7 @@ class Processor:
     def process(self, id, document) -> tuple[str, Any]:
         # Placeholder for processing logic
         return id, document
-    
+
 class MinimalProcessor(Processor):
     def process(self, id, document) -> tuple[str, str]:
         return document[0], json.dumps({
@@ -37,6 +38,7 @@ class Ingestion:
         self.processors = processors
         self.document_path = document_path
 
+    @perf_indicator("ingest", "docs")
     def ingest(self, batch_size: int = 1000):
         pipeline = self.db.pipeline()
         with open(self.document_path, "r") as f:
@@ -53,17 +55,21 @@ class Ingestion:
 
                 if batch_count >= batch_size:
                     results = pipeline.execute()
+                    ingested_now = sum(results)
                     batch_count = 0
-                    if sum(results) == batch_size:
-                        print(f"Injested {sum(results)} documents")
-                        break
+                    if ingested_now == batch_size:
+                        print(f"Injested {ingested_now} documents")
+                        return None, ingested_now
                     else:
-                        batch_size -= sum(results)
-                        print(f"Partial ingestion: {sum(results)} documents")
+                        batch_size -= ingested_now
+                        print(f"Partial ingestion: {ingested_now} documents")
 
         if batch_count > 0:
-            pipeline.execute()
+            results = pipeline.execute()
+            ingested_now = sum(results)
+            return None, ingested_now
         print(f"There are now {self.db.dbsize()} documents in the database.")
+        return None, 0
 
 def connect_to_db(host: str, port: int):
     # Placeholder for database connection logic
@@ -88,4 +94,5 @@ def main():
     ingestion.ingest(args.batch_size)
     db.close()
 
-main()
+if __name__ == "__main__":
+    main()

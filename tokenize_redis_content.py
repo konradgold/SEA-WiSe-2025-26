@@ -6,6 +6,7 @@ import json
 from tokenization import get_tokenizer
 from collections import Counter
 import multiprocessing as mp
+from perf.simple_perf import perf_indicator
 
 _WORKER_TOKENIZER = None
 
@@ -24,6 +25,8 @@ def connect_to_db(host: str, port: int):
     # Placeholder for database connection logic
     return redis.Redis(host=host, port=port, decode_responses=True)
 
+
+@perf_indicator("tokenize_docs", "docs")
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
@@ -168,9 +171,9 @@ def main():
         for tok, mapping in postings_by_token.items():
             token_key = f"token:{tok}"
             pipe.hset(token_key, mapping=mapping)
-
         result = pipe.execute()
         corr += result.count(True)
+
     print(f"Number of correct tokenizations: {corr}")
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ import redis
 import sys
 import os
 from tokenization import get_tokenizer
+from perf.simple_perf import perf_indicator
 
 
 def connect_to_redis(host='localhost', port=6379):
@@ -15,10 +16,12 @@ def connect_to_redis(host='localhost', port=6379):
         print("Error: Could not connect to Redis. Make sure Redis server is running.")
         sys.exit(1)
 
+
+@perf_indicator("search", "queries")
 def search_documents(redis_client, query):
     # This assumes documents are stored with keys like 'doc:1', 'doc:2', etc.
     # and contain text content
-    matches = set()
+    matches = None  
     keys = ["token:" + str(token) for token in query]
     for key in  keys:
         print(key)
@@ -29,14 +32,15 @@ def search_documents(redis_client, query):
             matches = set() if matches else matches
             continue
         matches.intersection_update(postings.keys()) if matches else matches.update(postings.keys())
-    if matches:
-        out_matches = []
-        for match in matches:
-            doc_content = redis_client.get(match)
-            if doc_content:
-                doc_json = json.loads(doc_content)
-                out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
-        return out_matches
+    if not matches:
+        return []
+    out_matches = []
+    for match in matches:
+        doc_content = redis_client.get(match)
+        if doc_content:
+            doc_json = json.loads(doc_content)
+            out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
+    return out_matches
 
 
 def main():

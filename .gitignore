@@ -208,3 +208,6 @@ __marimo__/
 
 
 msmarco-docs.*
+
+# Mac OS
+.DS_Store
