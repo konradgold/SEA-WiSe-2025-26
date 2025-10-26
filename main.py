@@ -23,15 +23,21 @@ def search_documents(redis_client, query):
     # and contain text content
     matches = None  
     keys = ["token:" + str(token) for token in query]
-    for key in  keys:
-        print(key)
+    for key in keys:
         # Hash postings: field = doc_id, value = tf
         postings = redis_client.hgetall(key)
         if not postings:
-            # No postings list for this token; intersect to empty set
-            matches = set() if matches else matches
-            continue
-        matches.intersection_update(postings.keys()) if matches else matches.update(postings.keys())
+            # AND semantics: if any token has no postings, result is empty
+            matches = set()
+            break
+        doc_ids = set(postings.keys())
+        if matches is None:
+            matches = doc_ids
+        else:
+            matches.intersection_update(doc_ids)
+        if not matches:
+            # Early exit if intersection is empty
+            break
     if not matches:
         return []
     out_matches = []

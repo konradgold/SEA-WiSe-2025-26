@@ -30,61 +30,93 @@ def connect_to_db(host: str, port: int):
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
-    parser.add_argument('--redis-port', type=int, default=int(os.getenv("REDIS_PORT", 6379)),
-                      help='Redis server port')
-    parser.add_argument('--flush-every', type=int, default=50,
-                      help='number of documents per pipeline execute (default: 50)')
-    parser.add_argument('--scan-count', type=int, default=1000,
-                      help='hint for SCAN iteration batch size (default: 1000)')
-    parser.add_argument('--store-tokens', action='store_true',
-                      help='store token list inside each document (default: False)')
-    parser.add_argument('--workers', type=int, default=max(1, (os.cpu_count() or 2) // 2),
-                      help='number of parallel worker processes for tokenization')
+    parser.add_argument(
+        "--redis-port",
+        type=int,
+        default=int(os.getenv("REDIS_PORT", 6379)),
+        help="Redis server port",
+    )
+    parser.add_argument(
+        "--flush-every",
+        type=int,
+        default=50,
+        help="number of documents per pipeline execute (default: 50)",
+    )
+    parser.add_argument(
+        "--scan-count",
+        type=int,
+        default=1000,
+        help="hint for SCAN iteration batch size (default: 1000)",
+    )
+    parser.add_argument(
+        "--store-tokens",
+        action="store_true",
+        help="store token list inside each document (default: False)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) // 2),
+        help="number of parallel worker processes for tokenization",
+    )  # Default half of available cores
     args = parser.parse_args()
 
     redis_port = args.redis_port
 
     db = connect_to_db("localhost", redis_port)
     pipe = db.pipeline()
-    corr = 0
+    # Track documents successfully tokenized and indexed
+    num_docs_processed = 0
+    local_tokenizer = get_tokenizer()
+    # Create a multiprocessing pool
+    pool = (
+        mp.Pool(processes=args.workers, initializer=_init_worker)
+        if args.workers > 1
+        else None
+    )
     # Iterate docs efficiently without blocking Redis
     def iter_doc_keys():
-        for k in db.scan_iter(match='*', count=args.scan_count):
-            if not isinstance(k, str):
+        for redis_key in db.scan_iter(match="D*", count=args.scan_count):
+            if not isinstance(redis_key, str):
                 try:
-                    kk = k.decode()
+                    decoded_key = redis_key.decode()
                 except Exception:
                     continue
             else:
-                kk = k
-            if not kk.startswith('token:'):
-                yield kk
+                decoded_key = redis_key
+            # Only yield keys that are not token keys
+            if not decoded_key.startswith("token:"):
+                yield decoded_key
 
     # Worker initializer creates a tokenizer in each process
     batch_keys = []
-    for key in iter_doc_keys():
-        batch_keys.append(key)
+    for doc_key in iter_doc_keys():
+        batch_keys.append(doc_key)
         if len(batch_keys) >= args.flush_every:
             # Fetch docs in batch
-            contents = db.mget(batch_keys)
+            document_contents = db.mget(batch_keys)
             docs = []
-            for k, c in zip(batch_keys, contents):
+            for doc_key_single, content in zip(batch_keys, document_contents):
                 try:
-                    content_json = json.loads(c) if c else None
+                    content_json = json.loads(content) if content else None
                 except (json.JSONDecodeError, TypeError):
                     content_json = None
                 if not content_json:
                     continue
-                body = content_json.get("body", "")
-                docs.append((k, body))
+                body_text = content_json.get("body", "")
+                docs.append((doc_key_single, body_text))
 
-            # Tokenize in parallel
-            if args.workers > 1 and len(docs) > 1:
-                with mp.Pool(processes=args.workers, initializer=_init_worker) as pool:
-                    tokenized = pool.map(_tokenize_doc, docs)
+            # Tokenize
+            if pool and len(docs) > 1:
+                tokenized = pool.map(_tokenize_doc, docs)
             else:
-                local_tok = get_tokenizer()
-                tokenized = [(k, local_tok.tokenize(b)) for k, b in docs]
+                tokenized = [
+                    (doc_key_single, local_tokenizer.tokenize(body_text))
+                    for doc_key_single, body_text in docs
+                ]
+
+            # Update document metric
+            num_docs_processed += len(tokenized)
 
             # Aggregate postings by token
             postings_by_token = {}
@@ -121,60 +153,71 @@ def main():
                 token_key = f"token:{tok}"
                 pipe.hset(token_key, mapping=mapping)
 
-            result = pipe.execute()
-            corr += result.count(True)
+            pipe.execute()
             batch_keys = []
 
     # flush remainder
     if batch_keys:
         contents = db.mget(batch_keys)
         docs = []
-        for k, c in zip(batch_keys, contents):
+        for doc_key_single, content in zip(batch_keys, contents):
             try:
-                content_json = json.loads(c) if c else None
+                content_json = json.loads(content) if content else None
             except (json.JSONDecodeError, TypeError):
                 content_json = None
             if not content_json:
                 continue
-            body = content_json.get("body", "")
-            docs.append((k, body))
+            body_text = content_json.get("body", "")
+            if not body_text:
+                continue
+            docs.append((doc_key_single, body_text))
 
-        if args.workers > 1 and len(docs) > 1:
-            with mp.Pool(processes=args.workers, initializer=_init_worker) as pool:
-                tokenized = pool.map(_tokenize_doc, docs)
+        if pool and len(docs) > 1:
+            tokenized = pool.map(_tokenize_doc, docs)
         else:
-            local_tok = get_tokenizer()
-            tokenized = [(k, local_tok.tokenize(b)) for k, b in docs]
+            tokenized = [
+                (doc_key_single, local_tokenizer.tokenize(body_text))
+                for doc_key_single, body_text in docs
+            ]
+
+        # Update document metric
+        num_docs_processed += len(tokenized)
 
         postings_by_token = {}
-        for doc_key, tokens in tokenized:
+        for doc_key_single, tokens in tokenized:
             counts = Counter(tokens)
             for tok, tf in counts.items():
                 mapping = postings_by_token.get(tok)
                 if mapping is None:
-                    postings_by_token[tok] = {doc_key: int(tf)}
+                    postings_by_token[tok] = {doc_key_single: int(tf)}
                 else:
-                    mapping[doc_key] = int(tf)
+                    mapping[doc_key_single] = int(tf)
 
         if args.store_tokens:
-            contents = db.mget([k for k, _ in docs])
-            for k, c, (_, tokens) in zip([k for k, _ in docs], contents, tokenized):
+            contents = db.mget([doc_key_single for doc_key_single, _ in docs])
+            for doc_key_single, content, (_, tokens) in zip(
+                [doc_key_single for doc_key_single, _ in docs], contents, tokenized
+            ):
                 try:
-                    content_json = json.loads(c) if c else None
+                    content_json = json.loads(content) if content else None
                 except (json.JSONDecodeError, TypeError):
                     content_json = None
                 if not content_json:
                     continue
                 content_json["tokens"] = tokens
-                pipe.set(k, json.dumps(content_json))
+                pipe.set(doc_key_single, json.dumps(content_json))
 
         for tok, mapping in postings_by_token.items():
             token_key = f"token:{tok}"
             pipe.hset(token_key, mapping=mapping)
-        result = pipe.execute()
-        corr += result.count(True)
+        pipe.execute()
 
-    print(f"Number of correct tokenizations: {corr}")
+    # Cleanup multiprocessing pool
+    if pool:
+        pool.close()
+        pool.join()
+
+    print(f"Documents processed: {num_docs_processed}")
 
 if __name__ == "__main__":
     mp.freeze_support()
