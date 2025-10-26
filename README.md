@@ -32,3 +32,15 @@ Run search:
 ```python
 uv run main.py
 ```
+
+## Performance benchmarking
+
+Performance of key functions is printed automatically. To track the performance of different setups for many documents/queries we can use:
+
+```bash
+# Ingest 1000 docs and return avg docs/min
+python -m perf.runner --mode ingest --batch-size 1000 --documents-path msmarco-docs.tsv
+
+# Query the index, 200 iterations cycling through queries in queries/sample_queries.txt, returns queries/min
+python -m perf.runner --mode query --queries-path queries/sample_queries.txt --iterations 200 
+```
