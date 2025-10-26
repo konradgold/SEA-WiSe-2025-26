@@ -9,13 +9,15 @@ import multiprocessing as mp
 
 _WORKER_TOKENIZER = None
 
-def _init_worker(tok_backend):
+
+def _init_worker(_tok_backend_unused=None):
     global _WORKER_TOKENIZER
-    _WORKER_TOKENIZER = get_tokenizer(tok_backend)
+    _WORKER_TOKENIZER = get_tokenizer()
+
 
 def _tokenize_doc(payload):
     key, body = payload
-    tok = _WORKER_TOKENIZER or get_tokenizer(os.getenv("TOKENIZER_BACKEND"))
+    tok = _WORKER_TOKENIZER or get_tokenizer()
     return key, tok.tokenize(body)
 
 def connect_to_db(host: str, port: int):
@@ -36,9 +38,6 @@ def main():
     parser.add_argument('--workers', type=int, default=max(1, (os.cpu_count() or 2) // 2),
                       help='number of parallel worker processes for tokenization')
     args = parser.parse_args()
-
-    backend = os.getenv("TOKENIZER_BACKEND")
-
 
     redis_port = args.redis_port
 
@@ -78,10 +77,10 @@ def main():
 
             # Tokenize in parallel
             if args.workers > 1 and len(docs) > 1:
-                with mp.Pool(processes=args.workers, initializer=_init_worker, initargs=(backend,)) as pool:
+                with mp.Pool(processes=args.workers, initializer=_init_worker) as pool:
                     tokenized = pool.map(_tokenize_doc, docs)
             else:
-                local_tok = get_tokenizer(backend)
+                local_tok = get_tokenizer()
                 tokenized = [(k, local_tok.tokenize(b)) for k, b in docs]
 
             # Aggregate postings by token
@@ -138,10 +137,10 @@ def main():
             docs.append((k, body))
 
         if args.workers > 1 and len(docs) > 1:
-            with mp.Pool(processes=args.workers, initializer=_init_worker, initargs=(backend,)) as pool:
+            with mp.Pool(processes=args.workers, initializer=_init_worker) as pool:
                 tokenized = pool.map(_tokenize_doc, docs)
         else:
-            local_tok = get_tokenizer(backend)
+            local_tok = get_tokenizer()
             tokenized = [(k, local_tok.tokenize(b)) for k, b in docs]
 
         postings_by_token = {}
