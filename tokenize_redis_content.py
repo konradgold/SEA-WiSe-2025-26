@@ -5,6 +5,7 @@ from redis.commands.json.path import Path
 import redis
 import json
 from transformers import AutoTokenizer
+from perf.simple_perf import perf_indicator
 
 class TokenizerAbstract:
     def tokenize(self, text: str) -> list[int]:
@@ -14,6 +15,8 @@ def connect_to_db(host: str, port: int):
     # Placeholder for database connection logic
     return redis.Redis(host=host, port=port, decode_responses=True)
 
+
+@perf_indicator("tokenize_docs", "docs")
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
@@ -23,13 +26,13 @@ def main():
 
     tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
 
-
     redis_port = args.redis_port
 
     db = connect_to_db("localhost", redis_port)
     pipe = db.pipeline()
     keys = [k for k in db.keys() if not k.startswith('token:')]
     corr = 0
+    processed = 0
     for key in keys:
         try:
             content = db.get(key)
@@ -40,7 +43,6 @@ def main():
         body = content_json.get("body", "")
         tokens = tokenizer.encode(body)
         content_json["tokens"] = tokens
-
 
         unique_tokens = set(tokens)
         for token in unique_tokens:
@@ -56,8 +58,11 @@ def main():
             pipe.json().merge(token_key, Path("$.documents"), doc_field)
         result = pipe.execute()
         corr += result.count(True)
+        processed += 1
     print(f"Number of correct tokenizations: {corr}")
 
     db.close()
+
+    return None, processed
 
 main()
