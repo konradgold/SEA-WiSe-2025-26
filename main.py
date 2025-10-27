@@ -47,7 +47,6 @@ def search_documents(redis_client, query):
             out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
     return out_matches
 
-
 def main():
     redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
     tokenizer = get_tokenizer()

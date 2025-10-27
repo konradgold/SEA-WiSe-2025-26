@@ -61,6 +61,7 @@ def main():
     )  # Default half of available cores
     args = parser.parse_args()
 
+
     redis_port = args.redis_port
 
     db = connect_to_db("localhost", redis_port)
