@@ -4,7 +4,6 @@ import os
 import redis
 import json
 from tokenization import get_tokenizer
-from collections import Counter
 import multiprocessing as mp
 from perf.simple_perf import perf_indicator
 
@@ -26,7 +25,7 @@ def connect_to_db(host: str, port: int):
     return redis.Redis(host=host, port=port, decode_responses=True)
 
 
-@perf_indicator("tokenize_docs", "docs")
+@perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
@@ -53,6 +52,20 @@ def main():
         action="store_true",
         help="store token list inside each document (default: False)",
     )
+    # Toggle storing positional indices in postings (default: True)
+    parser.add_argument(
+        "--store-positions",
+        dest="store_positions",
+        action="store_true",
+        help="store positional indices per token (default: True)",
+    )
+    parser.add_argument(
+        "--no-store-positions",
+        dest="store_positions",
+        action="store_false",
+        help="do not store positions; store only term frequencies",
+    )
+    parser.set_defaults(store_positions=True)
     parser.add_argument(
         "--workers",
         type=int,
@@ -60,7 +73,6 @@ def main():
         help="number of parallel worker processes for tokenization",
     )  # Default half of available cores
     args = parser.parse_args()
-
 
     redis_port = args.redis_port
 
@@ -75,7 +87,7 @@ def main():
         if args.workers > 1
         else None
     )
-    print(f"Using {args.workers} workers")
+    print(f"[tokenize_redis_content] Using {args.workers} workers")
 
     # Iterate docs efficiently without blocking Redis
     def iter_doc_keys():
@@ -121,21 +133,45 @@ def main():
             # Update document metric
             num_docs_processed += len(tokenized)
 
-            # Aggregate postings by token
+            # Aggregate postings by token (with or without positions)
             postings_by_token = {}
             for doc_key, tokens in tokenized:
                 if args.store_tokens:
-                    # update doc with tokens
-                    # re-fetch json from contents cache for simplicity
-                    # Note: we could reuse earlier parsed jsons by mapping keys
+                    # update doc with tokens later
                     pass
-                counts = Counter(tokens)
-                for tok, tf in counts.items():
-                    mapping = postings_by_token.get(tok)
-                    if mapping is None:
-                        postings_by_token[tok] = {doc_key: int(tf)}
-                    else:
-                        mapping[doc_key] = int(tf)
+                if args.store_positions:
+                    # Build positions per token
+                    positions_by_token = {}
+                    for idx, tok in enumerate(tokens):
+                        lst = positions_by_token.get(tok)
+                        if lst is None:
+                            positions_by_token[tok] = [idx]
+                        else:
+                            lst.append(idx)
+                    # For each token found in this document, record its frequency and positions
+                    for tok, positions in positions_by_token.items():
+                        tf = len(positions)
+                        per_doc_value = json.dumps({"tf": int(tf), "pos": positions})
+                        mapping = postings_by_token.get(
+                            tok
+                        )  # get or create mapping of doc->posting for this token
+                        if mapping is None:
+                            postings_by_token[tok] = {doc_key: per_doc_value}
+                        else:
+                            mapping[doc_key] = per_doc_value
+                else:
+                    # Store only term frequencies
+                    counts = {}
+                    for tok in tokens:
+                        counts[tok] = counts.get(tok, 0) + 1
+                    for tok, tf in counts.items():
+                        mapping = postings_by_token.get(tok)
+                        if mapping is None:
+                            postings_by_token[tok] = {
+                                doc_key: json.dumps({"tf": int(tf)})
+                            }
+                        else:
+                            mapping[doc_key] = json.dumps({"tf": int(tf)})
 
             # Write postings and optional doc updates
             if args.store_tokens:
@@ -188,13 +224,35 @@ def main():
 
         postings_by_token = {}
         for doc_key_single, tokens in tokenized:
-            counts = Counter(tokens)
-            for tok, tf in counts.items():
-                mapping = postings_by_token.get(tok)
-                if mapping is None:
-                    postings_by_token[tok] = {doc_key_single: int(tf)}
-                else:
-                    mapping[doc_key_single] = int(tf)
+            if args.store_positions:
+                # Build positions per token
+                positions_by_token = {}
+                for idx, tok in enumerate(tokens):
+                    lst = positions_by_token.get(tok)
+                    if lst is None:
+                        positions_by_token[tok] = [idx]
+                    else:
+                        lst.append(idx)
+                for tok, positions in positions_by_token.items():
+                    tf = len(positions)
+                    per_doc_value = json.dumps({"tf": int(tf), "pos": positions})
+                    mapping = postings_by_token.get(tok)
+                    if mapping is None:
+                        postings_by_token[tok] = {doc_key_single: per_doc_value}
+                    else:
+                        mapping[doc_key_single] = per_doc_value
+            else:
+                counts = {}
+                for tok in tokens:
+                    counts[tok] = counts.get(tok, 0) + 1
+                for tok, tf in counts.items():
+                    mapping = postings_by_token.get(tok)
+                    if mapping is None:
+                        postings_by_token[tok] = {
+                            doc_key_single: json.dumps({"tf": int(tf)})
+                        }
+                    else:
+                        mapping[doc_key_single] = json.dumps({"tf": int(tf)})
 
         if args.store_tokens:
             contents = db.mget([doc_key_single for doc_key_single, _ in docs])
@@ -220,7 +278,7 @@ def main():
         pool.close()
         pool.join()
 
-    print(f"Documents processed: {num_docs_processed}")
+    print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
 
 if __name__ == "__main__":
     mp.freeze_support()

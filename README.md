@@ -23,6 +23,7 @@ uv run ingestion.py [--batch-size 500 --documents-path "..." --redis-port xyz]
 ```
 Create the inverted index:
 ```python
+# Run with --no-store-positions to only store term frequencies
 uv run tokenize_redis_content.py
 ```
 - Tokenizer configuration is controlled via env variables:
