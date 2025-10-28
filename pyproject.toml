@@ -8,7 +8,7 @@ dependencies = [
     "python-dotenv>=0.9.9",
     "pandas>=2.3.3",
     "redis>=6.4.0",
-    "spacy[apple]>=3.8.7",
+    "spacy>=3.8.7",
     "tokenizers>=0.22.1",
     "transformers>=4.57.1",
 ]
@@ -17,4 +17,9 @@ dependencies = [
 dev = [
     "ipykernel>=7.0.1",
     "ipywidgets>=8.1.7",
+]
+
+[project.optional-dependencies]
+apple = [
+  "spacy[apple]>=3.8.7; sys_platform == 'darwin'"
 ]
