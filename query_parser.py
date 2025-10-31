@@ -64,10 +64,17 @@ class QueryEngine:
         return query_elements
 
     def parse_bracket(self, idx_start: int, query_elements: List[str | AbstractOperator]) -> List [str | AbstractOperator]:
+        # necessary to handle nested brackets
+        bracketDepth = 0
         for idx_end in range(idx_start + 1, len(query_elements)):
                 element = query_elements[idx_end]
+                if isinstance(element, str) and "(" in element:
+                    bracketDepth += 1
                 if isinstance(element, str) and ")" in element:
-                    break
+                    if bracketDepth > 0:
+                        bracketDepth -= 1
+                    else:
+                        break
         bracket = query_elements[idx_start:idx_end+1]
         bracket[0] = bracket[0].replace("(", "")
         bracket[-1] = bracket[-1].replace(")", "")
