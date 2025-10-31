@@ -6,7 +6,7 @@ from perf.simple_perf import perf_indicator
 
 from ingestion import Ingestion, MinimalProcessor, connect_to_db
 from main import connect_to_redis, search_documents
-from transformers import AutoTokenizer
+from tokenization import get_tokenizer
 
 
 def _read_queries(path: str) -> List[str]:
@@ -26,15 +26,17 @@ def run_ingest(documents_path: str, batch_size: int, redis_host: str, redis_port
 
 
 @perf_indicator("query", "queries")
-def run_query(queries_path: str, iterations: int, redis_host: str, redis_port: int, tokenizer_model: str):
+def run_query(queries_path: str, iterations: int, redis_host: str, redis_port: int):
     queries = _read_queries(queries_path)
     r = connect_to_redis(redis_host, redis_port)
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model)
+    tokenizer = get_tokenizer()
 
     for i in range(iterations):
         q = queries[i % len(queries)]
         # tokenize
-        _tokenize = perf_indicator("tokenize", "queries")(lambda x: (tokenizer.encode(x), 1))
+        _tokenize = perf_indicator("tokenize", "queries")(
+            lambda x: (tokenizer.tokenize(x), 1)
+        )
         tokens = _tokenize(q)
         # search
         _search = perf_indicator("search", "queries")(lambda t: (search_documents(r, t) or [], 1))
@@ -52,20 +54,19 @@ def main():
     parser.add_argument("--batch-size", type=int, default=400)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--redis-host", type=str, default=os.getenv("REDIS_HOST", "localhost"))
-    parser.add_argument("--redis-port", type=int, default=int(os.getenv("REDIS_PORT", 6379)))
-    parser.add_argument("--tokenizer-model", type=str, default=os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
+    parser.add_argument(
+        "--redis-port", type=int, default=int(os.getenv("REDIS_PORT", 6379))
+    )
 
     args = parser.parse_args()
 
     if args.mode == "ingest":
         run_ingest(args.documents_path, args.batch_size, args.redis_host, args.redis_port)
     elif args.mode == "query":
-        run_query(args.queries_path, args.iterations, args.redis_host, args.redis_port, args.tokenizer_model)
+        run_query(args.queries_path, args.iterations, args.redis_host, args.redis_port)
     else:
         raise ValueError(f"Invalid mode: {args.mode}")
 
 
 if __name__ == "__main__":
     main()
-
-
