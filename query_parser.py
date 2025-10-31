@@ -6,16 +6,16 @@ from typing import Callable, List
 
 class QueryParser:
 
-    operator2parser : dict[Operators, Callable[[QueryParser,int, List [str | AbstractOperator]], List [str | AbstractOperator]]]
+    operator2parser : dict[Operators, Callable[[int, List [str | AbstractOperator]], List [str | AbstractOperator]]]
 
     def __init__(self):
         self.operator2parser = {
-            Operators.BRACKET : QueryParser.parse_bracket,
-            Operators.AND : QueryParser.parse_pre_and_post,
-            Operators.OR : QueryParser.parse_pre_and_post,
-            Operators.ANDNOT : QueryParser.parse_pre_and_post,
-            Operators.PHRASE : QueryParser.parse_phrase,
-            Operators.TERM : QueryParser.parse_self}
+            Operators.BRACKET : self.parse_bracket,
+            Operators.AND : self.parse_pre_and_post,
+            Operators.OR : self.parse_pre_and_post,
+            Operators.ANDNOT : self.parse_pre_and_post,
+            Operators.PHRASE : self.parse_phrase,
+            Operators.TERM : self.parse_self}
     
 
     def process_phrase2query(self, phrase : str) -> AbstractOperator:
@@ -37,8 +37,7 @@ class QueryParser:
                     continue
                 clazz = Operators.get_EnumOperator(element)
                 if clazz == current_operator:
-                    # elements = clazz(self, idx, elements)           
-                    elements = self.operator2parser[clazz](self, idx, elements)   
+                    elements = self.operator2parser[clazz](idx, elements)   
                 idx += 1
         return elements[0]
     
