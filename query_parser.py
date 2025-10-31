@@ -1,21 +1,21 @@
-from query_operators import AbstractOperator, PhraseOperator
+from query_operators import AbstractOperator
 from query_operator_specs import Operators
 
 from typing import Callable, List
 
 
-class QueryEngine:
+class QueryParser:
 
-    operator2parser : dict[Operators, Callable[[QueryEngine,int, List [str | AbstractOperator]], List [str | AbstractOperator]]]
+    operator2parser : dict[Operators, Callable[[QueryParser,int, List [str | AbstractOperator]], List [str | AbstractOperator]]]
 
     def __init__(self):
         self.operator2parser = {
-            Operators.BRACKET : QueryEngine.parse_bracket,
-            Operators.AND : QueryEngine.parse_pre_and_post,
-            Operators.OR : QueryEngine.parse_pre_and_post,
-            Operators.ANDNOT : QueryEngine.parse_pre_and_post,
-            Operators.PHRASE : QueryEngine.parse_phrase,
-            Operators.TERM : QueryEngine.parse_self}
+            Operators.BRACKET : QueryParser.parse_bracket,
+            Operators.AND : QueryParser.parse_pre_and_post,
+            Operators.OR : QueryParser.parse_pre_and_post,
+            Operators.ANDNOT : QueryParser.parse_pre_and_post,
+            Operators.PHRASE : QueryParser.parse_phrase,
+            Operators.TERM : QueryParser.parse_self}
     
 
     def process_phrase2query(self, phrase : str) -> AbstractOperator:

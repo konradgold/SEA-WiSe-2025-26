@@ -1,13 +1,13 @@
 import unittest
 
-from query_parser import QueryEngine
+from query_parser import QueryParser
 from query_operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from query_operator_specs import Operators
 
 
 class TestQueryEngine(unittest.TestCase):
     def test_parse_OR_query(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("a OR b")
         self.assertIsInstance(root_operator, OROperator)
         self.assertEqual(len(root_operator.children), 2)
@@ -15,7 +15,7 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[1], TermOperator)
 
     def test_parse_AND_query(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("a AND a ANDNOT b")
         self.assertIsInstance(root_operator, ANDNOTOperator)
         self.assertEqual(len(root_operator.children), 2)
@@ -25,7 +25,7 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[0].children[1], TermOperator)
 
     def test_parse_PHRASE_query(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("'hello world' AND 'foo bar'")
         self.assertIsInstance(root_operator, ANDOperator)
         self.assertEqual(len(root_operator.children), 2)
@@ -36,7 +36,7 @@ class TestQueryEngine(unittest.TestCase):
 
         
     def test_parse_bracket_query(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("(cat OR dog) and tree")
         self.assertIsInstance(root_operator, ANDOperator)
         self.assertIsInstance(root_operator.children[0], OROperator)
@@ -47,7 +47,7 @@ class TestQueryEngine(unittest.TestCase):
         self.assertEqual(root_operator.children[0].children[1].phrase, "dog")
 
     def test_parse_nested_bracket_query(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("(cat andnot (blue or green) or dog) and tree")
         self.assertIsInstance(root_operator, ANDOperator)
         self.assertIsInstance(root_operator.children[0], OROperator)
@@ -60,7 +60,7 @@ class TestQueryEngine(unittest.TestCase):
 
 
     def test_parse_PHRASE_single_tick(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("it's a test")
         self.assertIsInstance(root_operator, TermOperator)
         self.assertEqual(root_operator.phrase, "it's")
@@ -79,7 +79,7 @@ class TestQueryEngine(unittest.TestCase):
 
 
     def test_DEMO_for_execution(self):
-        engine = QueryEngine()
+        engine = QueryParser()
         root_operator = engine.process_phrase2query("banana AND banana OR cherry ANDNOT banana")
         result = root_operator.execute()
         expected_ids = {"ID-banana", "ID-cherry"}
