@@ -58,7 +58,7 @@ class Ingestion:
                     ingested_now = sum(results)
                     batch_count = 0
                     if ingested_now == batch_size:
-                        print(f"Injested {ingested_now} documents")
+                        print(f"Ingested {ingested_now} documents")
                         return None, ingested_now
                     else:
                         batch_size -= ingested_now

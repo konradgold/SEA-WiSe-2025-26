@@ -1,7 +1,5 @@
 import unittest
 
-from regex import P
-
 from query_engine import QueryEngine
 from query_operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from query_parser import Operators
