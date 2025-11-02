@@ -11,9 +11,7 @@ class TermOperator(AbstractOperator):
         self.phrase = phrase
     
     def execute(self) -> set:
-        '''
-        This just searches for the phrase
-        '''
+        # TODO: Implement term search
         print(f"Searching for term: {self.phrase}")
         return {f"ID-{self.phrase}"}
 
@@ -22,10 +20,7 @@ class PhraseOperator(AbstractOperator):
         self.phrase = phrase
     
     def execute(self) -> set:
-        '''
-        This just searches for the phrase
-        '''
-        # Implementation of phrase search
+        # TODO: Implement phrase search
         pass
 
 class OROperator(AbstractOperator):
