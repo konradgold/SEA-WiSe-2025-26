@@ -4,9 +4,9 @@ import os
 import redis
 import json
 from tokenization import get_tokenizer
-from collections import Counter
 import multiprocessing as mp
 from perf.simple_perf import perf_indicator
+from collections import Counter
 
 _WORKER_TOKENIZER = None
 
@@ -59,16 +59,34 @@ def tokenize_documents(docs, pool, local_tokenizer):
     ]
 
 
-def build_postings(tokenized):
+def build_postings(tokenized, store_positions: bool):
     postings_by_token = {}
     for doc_key, tokens in tokenized:
-        counts = Counter(tokens)
-        for tok, tf in counts.items():
-            mapping = postings_by_token.get(tok)
-            if mapping is None:
-                postings_by_token[tok] = {doc_key: int(tf)}
-            else:
-                mapping[doc_key] = int(tf)
+        if store_positions:
+            positions_by_token = {}
+            for idx, tok in enumerate(tokens):
+                lst = positions_by_token.get(tok)
+                if lst is None:
+                    positions_by_token[tok] = [idx]
+                else:
+                    lst.append(idx)
+            for tok, positions in positions_by_token.items():
+                tf = len(positions)
+                per_doc_value = json.dumps({"tf": int(tf), "pos": positions})
+                mapping = postings_by_token.get(tok)
+                if mapping is None:
+                    postings_by_token[tok] = {doc_key: per_doc_value}
+                else:
+                    mapping[doc_key] = per_doc_value
+        else:
+            counts = Counter(tokens)
+            for tok, tf in counts.items():
+                mapping = postings_by_token.get(tok)
+                value = json.dumps({"tf": int(tf)})
+                if mapping is None:
+                    postings_by_token[tok] = {doc_key: value}
+                else:
+                    mapping[doc_key] = value
     return postings_by_token
 
 
@@ -98,7 +116,7 @@ def process_batch(db, pipe, batch_keys, args, pool, local_tokenizer):
         return 0
 
     tokenized = tokenize_documents(docs, pool, local_tokenizer)
-    postings_by_token = build_postings(tokenized)
+    postings_by_token = build_postings(tokenized, args.store_positions)
 
     if args.store_tokens:
         update_documents_with_tokens(db, docs, tokenized, pipe)
@@ -133,6 +151,20 @@ def parse_arguments():
         action="store_true",
         help="store token list inside each document (default: False)",
     )
+    # Toggle storing positional indices in postings (default: True)
+    parser.add_argument(
+        "--store-positions",
+        dest="store_positions",
+        action="store_true",
+        help="store positional indices per token (default: True)",
+    )
+    parser.add_argument(
+        "--no-store-positions",
+        dest="store_positions",
+        action="store_false",
+        help="do not store positions; store only term frequencies",
+    )
+    parser.set_defaults(store_positions=True)
     parser.add_argument(
         "--workers",
         type=int,
@@ -140,7 +172,6 @@ def parse_arguments():
         help="number of parallel worker processes for tokenization",
     )
     return parser.parse_args()
-
 
 def connect_to_db(host: str, port: int):
     return redis.Redis(host=host, port=port, decode_responses=True)
@@ -160,7 +191,7 @@ def main():
         if args.workers > 1
         else None
     )
-    print(f"Using {args.workers} workers")
+    print(f"[tokenize_redis_content] Using {args.workers} workers")
 
     batch_keys = []
     for doc_key in iter_doc_keys(db, args.scan_count):
@@ -175,12 +206,11 @@ def main():
         num_docs_processed += process_batch(
             db, pipe, batch_keys, args, pool, local_tokenizer
         )
-
     if pool:
         pool.close()
         pool.join()
 
-    print(f"Documents processed: {num_docs_processed}")
+    print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
 
 
 if __name__ == "__main__":
