@@ -21,11 +21,9 @@ class SimpleTokenizer(TokenizerAbstract):
 
     def __init__(
         self,
-        config: TokenizerConfig | None = None,
+        config: TokenizerConfig | None = TokenizerConfig(),
         stopwords: Optional[set[str]] = None,
     ):
-        if config is None:
-            config = TokenizerConfig()
         self.config = config
         self.stopwords = (
             stopwords
