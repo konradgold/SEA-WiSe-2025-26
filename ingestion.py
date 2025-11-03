@@ -51,6 +51,7 @@ class Ingestion:
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
         total_inserted = 0
+        total_visited = 0
 
         with open(self.document_path, "r") as f:
             batch_count = 0
@@ -66,13 +67,20 @@ class Ingestion:
                 pipeline.setnx(doc_id, doc)
                 keys_in_batch.append(doc_id)
                 batch_count += 1
+                total_visited += 1
 
                 if batch_count >= batch_size:
                     total_inserted = self._execute_pipe(pipeline, keys_in_batch, inserted_keys, total_inserted)
                     remaining = num_documents - total_inserted
                     batch_count = 0
                     keys_in_batch = []
-                    logger.info(f"{total_inserted} of {num_documents} documents ingested so far...")
+                    percent = (total_inserted / num_documents * 100) if num_documents else 0.0
+                    logger.info(
+                        f"Ingested {total_inserted:,}/{num_documents:,} ({percent:.1f}%) — "
+                        f"visited {total_visited:,}; remaining {remaining:,}"
+                    )
+                    if total_inserted == 0 and total_visited % 1000 == 0:
+                        logger.info("This is intended behavior if documents already exist in the database.")
                 if remaining <= batch_count:
                     break
 
@@ -100,7 +108,7 @@ def connect_to_db(host: str, port: int):
 def main():
     load_dotenv()
     parser = argparse.ArgumentParser(description='Ingest documents into Redis')
-    parser.add_argument('--num-documents', type=int, default=400,
+    parser.add_argument('--num-documents', type=int, default=200,
                       help='number of documents to ingest (default: 400)')
     parser.add_argument('--batch-size', type=int, default=100,
                       help='number of documents per batch (default: 100)')
