@@ -38,13 +38,16 @@ Recommended: Use .env file for redis port/path to documents
 
 Ingest documents naively using:
 ```python
-uv run ingestion.py [--batch-size 500 --documents-path "..." --redis_port xyz]
+uv run ingestion.py [--batch-size 500 --documents-path "..." --redis-port xyz]
 ```
 Create the inverted index:
 ```python
 uv run tokenize_redis_content.py
 ```
-- if you want to use an AutoTokenizer from the transformer library, you can simply set that in your .env, e.g. TOKENIZER_MODEL=bert-base-cased.
+- Tokenizer configuration is controlled via env variables:
+  - `TOKENIZER_BACKEND` = `simple` (default) or `spacy`
+  - `SPACY_MODEL` = name of spaCy model or `blank`
+  - The tokenizer scans documents with keys matching `D*` and writes postings under `token:{token}`.
 - Ingesting and tokenizing 10000 documents is <110MB
 
 Run search:

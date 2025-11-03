@@ -1,68 +1,188 @@
 import argparse
 from dotenv import load_dotenv
 import os
-from redis.commands.json.path import Path
 import redis
 import json
-from transformers import AutoTokenizer
+from tokenization import get_tokenizer
+from collections import Counter
+import multiprocessing as mp
 from perf.simple_perf import perf_indicator
 
-class TokenizerAbstract:
-    def tokenize(self, text: str) -> list[int]:
-        raise NotImplementedError("Subclasses should implement this method.")
+_WORKER_TOKENIZER = None
+
+
+def _init_worker():
+    global _WORKER_TOKENIZER
+    _WORKER_TOKENIZER = get_tokenizer()
+
+
+def _tokenize_doc(payload):
+    key, body = payload
+    tok = _WORKER_TOKENIZER or get_tokenizer()
+    return key, tok.tokenize(body)
+
+
+def iter_doc_keys(db, scan_count):
+    for redis_key in db.scan_iter(match="D*", count=scan_count):
+        if not isinstance(redis_key, str):
+            try:
+                decoded_key = redis_key.decode()
+            except Exception:
+                continue
+        else:
+            decoded_key = redis_key
+        if not decoded_key.startswith("token:"):
+            yield decoded_key
+
+
+def load_documents(db, keys):
+    contents = db.mget(keys)
+    docs = []
+    for key, content in zip(keys, contents):
+        try:
+            content_json = json.loads(content) if content else None
+        except (json.JSONDecodeError, TypeError):
+            content_json = None
+        if not content_json:
+            continue
+        body_text = content_json.get("body", "")
+        if body_text:
+            docs.append((key, body_text))
+    return docs
+
+
+def tokenize_documents(docs, pool, local_tokenizer):
+    if pool and len(docs) > 1:
+        return pool.map(_tokenize_doc, docs)
+    return [
+        (doc_key, local_tokenizer.tokenize(body_text)) for doc_key, body_text in docs
+    ]
+
+
+def build_postings(tokenized):
+    postings_by_token = {}
+    for doc_key, tokens in tokenized:
+        counts = Counter(tokens)
+        for tok, tf in counts.items():
+            mapping = postings_by_token.get(tok)
+            if mapping is None:
+                postings_by_token[tok] = {doc_key: int(tf)}
+            else:
+                mapping[doc_key] = int(tf)
+    return postings_by_token
+
+
+def update_documents_with_tokens(db, docs, tokenized, pipe):
+    doc_keys = [k for k, _ in docs]
+    contents = db.mget(doc_keys)
+    for k, c, (_, tokens) in zip(doc_keys, contents, tokenized):
+        try:
+            content_json = json.loads(c) if c else None
+        except (json.JSONDecodeError, TypeError):
+            content_json = None
+        if not content_json:
+            continue
+        content_json["tokens"] = tokens
+        pipe.set(k, json.dumps(content_json))
+
+
+def write_postings(postings_by_token, pipe):
+    for tok, mapping in postings_by_token.items():
+        token_key = f"token:{tok}"
+        pipe.hset(token_key, mapping=mapping)
+
+
+def process_batch(db, pipe, batch_keys, args, pool, local_tokenizer):
+    docs = load_documents(db, batch_keys)
+    if not docs:
+        return 0
+
+    tokenized = tokenize_documents(docs, pool, local_tokenizer)
+    postings_by_token = build_postings(tokenized)
+
+    if args.store_tokens:
+        update_documents_with_tokens(db, docs, tokenized, pipe)
+
+    write_postings(postings_by_token, pipe)
+    pipe.execute()
+    return len(tokenized)
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Tokenize documents in Redis")
+    parser.add_argument(
+        "--redis-port",
+        type=int,
+        default=int(os.getenv("REDIS_PORT", 6379)),
+        help="Redis server port",
+    )
+    parser.add_argument(
+        "--flush-every",
+        type=int,
+        default=50,
+        help="number of documents per pipeline execute (default: 50)",
+    )
+    parser.add_argument(
+        "--scan-count",
+        type=int,
+        default=1000,
+        help="hint for SCAN iteration batch size (default: 1000)",
+    )
+    parser.add_argument(
+        "--store-tokens",
+        action="store_true",
+        help="store token list inside each document (default: False)",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) // 2),
+        help="number of parallel worker processes for tokenization",
+    )
+    return parser.parse_args()
+
 
 def connect_to_db(host: str, port: int):
-    # Placeholder for database connection logic
     return redis.Redis(host=host, port=port, decode_responses=True)
 
 
 @perf_indicator("tokenize_docs", "docs")
 def main():
     load_dotenv()
-    parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
-    parser.add_argument('--redis-port', type=int, default=int(os.getenv("REDIS_PORT", 6379)),
-                      help='Redis server port')
-    args = parser.parse_args()
+    args = parse_arguments()
 
-    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
-
-    redis_port = args.redis_port
-
-    db = connect_to_db("localhost", redis_port)
+    db = connect_to_db("localhost", args.redis_port)
     pipe = db.pipeline()
-    keys = [k for k in db.keys() if not k.startswith('token:')]
-    corr = 0
-    processed = 0
-    for key in keys:
-        try:
-            content = db.get(key)
-            content_json = json.loads(content)
-        except (json.JSONDecodeError, TypeError):
-            print(f"Skipping key {key}: unable to decode JSON.")
-            continue
-        body = content_json.get("body", "")
-        tokens = tokenizer.encode(body)
-        content_json["tokens"] = tokens
+    num_docs_processed = 0
+    local_tokenizer = get_tokenizer()
+    pool = (
+        mp.Pool(processes=args.workers, initializer=_init_worker)
+        if args.workers > 1
+        else None
+    )
+    print(f"Using {args.workers} workers")
 
-        unique_tokens = set(tokens)
-        for token in unique_tokens:
-            token_key = f"token:{token}"
-            ok = db.json().set(token_key, Path.root_path(), {"documents": {}}, nx=True)
-        token_counts = {token: tokens.count(token) for token in unique_tokens}
-        print(f"Initialized token counts for {len(unique_tokens)} unique tokens in document {key}.")
-        pipe.set(key, json.dumps(content_json))
-        for token in unique_tokens:
-            token_key = f"token:{token}"
+    batch_keys = []
+    for doc_key in iter_doc_keys(db, args.scan_count):
+        batch_keys.append(doc_key)
+        if len(batch_keys) >= args.flush_every:
+            num_docs_processed += process_batch(
+                db, pipe, batch_keys, args, pool, local_tokenizer
+            )
+            batch_keys = []
 
-            doc_field = {key: token_counts[token]}  # ensure `key` is str
-            pipe.json().merge(token_key, Path("$.documents"), doc_field)
-        result = pipe.execute()
-        corr += result.count(True)
-        processed += 1
-    print(f"Number of correct tokenizations: {corr}")
+    if batch_keys:
+        num_docs_processed += process_batch(
+            db, pipe, batch_keys, args, pool, local_tokenizer
+        )
 
-    db.close()
+    if pool:
+        pool.close()
+        pool.join()
 
-    return None, processed
+    print(f"Documents processed: {num_docs_processed}")
 
-main()
+
+if __name__ == "__main__":
+    mp.freeze_support()
+    main()
