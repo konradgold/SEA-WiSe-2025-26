@@ -9,6 +9,25 @@ docker run -d --name redis-stack -p 6379:6379 -p 8001:8001 redis/redis-stack:lat
 ```
 - UI on localhost:8001, connect on localhost:6379
 
+Connect to production:
+```python
+import redis
+import dotenv
+import os
+
+dotenv.load_dotenv()
+
+r = redis.Redis(
+    host=os.getenv("REDIS_HOST_PROD", 
+            'seenar.cloud.sci.hpi.de'), 
+    port=os.getenv("REDIS_PORT", 6379) 
+    password=os.getenv("REDIS_PW", None))
+
+r.ping()
+```
+Requires corresponding env-variables.
+
+
 Download documents: 
 ```bash
 wget https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-docs.tsv.gz
