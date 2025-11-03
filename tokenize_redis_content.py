@@ -6,6 +6,7 @@ import redis
 import json
 from transformers import AutoTokenizer
 from perf.simple_perf import perf_indicator
+from utils.config import Config
 
 class TokenizerAbstract:
     def tokenize(self, text: str) -> list[int]:
@@ -19,14 +20,11 @@ def connect_to_db(host: str, port: int):
 @perf_indicator("tokenize_docs", "docs")
 def main():
     load_dotenv()
-    parser = argparse.ArgumentParser(description='Tokenize documents in Redis')
-    parser.add_argument('--redis-port', type=int, default=int(os.getenv("REDIS_PORT", 6379)),
-                      help='Redis server port')
-    args = parser.parse_args()
+    cfg = Config(load=True)
 
-    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
+    tokenizer = AutoTokenizer.from_pretrained(cfg.TOKENIZER.BACKEND)
 
-    redis_port = args.redis_port
+    redis_port = cfg.REDIS_PORT
 
     db = connect_to_db("localhost", redis_port)
     pipe = db.pipeline()

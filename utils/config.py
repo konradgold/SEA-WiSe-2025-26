@@ -67,8 +67,11 @@ class Config(object):
         if self.need_initialization:
             self.need_initialization = False
             if os.path.exists(base_path):
+
                 with open(base_path, 'r') as f:
                     cfg = yaml.load(f.read(), Loader=yaml.SafeLoader)
+            else:
+                logging.warning("Base config file not found at {}. Skipping base config loading.".format(base_path))
         return cfg
     
     def _load_yaml(self, args, file_name=""):

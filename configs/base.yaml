@@ -1,9 +1,3 @@
-
-
-REDIS_HOST: localhost
-REDIS_PORT: 6379
-DOCUMENTS: "msmarco-docs.tsv"
-
 TOKENIZER:
   MIN_LEN: 2
   BACKEND: "simple"  # options: "simple", "spacy"
@@ -13,3 +7,20 @@ TOKENIZER:
   STEM: false
   NUMBER_NORMALIZE: true
   SPACY_MODEL: "blank"
+
+REDIS_HOST: "localhost"
+REDIS_PORT: 6379
+DOCUMENTS: "msmarco-docs.tsv"
+
+INGESTION:
+  NUM_DOCUMENTS: 200
+  BATCH_SIZE: 100
+
+PERF_RUNNER:
+  MODE: "ingest" # "ingest" or "query"
+  DOCUMENTS_PATH: "msmarco-docs.tsv"
+  BATCH_SIZE: 400
+  ITERATIONS: 100
+  CLEANUP: true
+  QUERIES_PATH: "queries/sample_queries.txt"
+

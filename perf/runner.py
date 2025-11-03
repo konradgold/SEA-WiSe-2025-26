@@ -8,6 +8,8 @@ from ingestion import Ingestion, MinimalProcessor, connect_to_db
 from main import connect_to_redis, search_documents
 from transformers import AutoTokenizer
 
+from utils.config import Config
+
 
 def _read_queries(path: str) -> List[str]:
     with open(path, "r", encoding="utf-8") as f:
@@ -58,35 +60,20 @@ def run_query(queries_path: str, iterations: int, redis_host: str, redis_port: i
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Performance runner (simple console output)")
-    parser.add_argument("--mode", choices=["ingest", "query"], required=True)
-    parser.add_argument("--documents-path", type=str, default=os.getenv("DOCUMENTS", "msmarco-docs.tsv"))
-    parser.add_argument("--queries-path", type=str, default="queries/sample_queries.txt")
-    parser.add_argument("--batch-size", type=int, default=400)
-    parser.add_argument("--iterations", type=int, default=100)
-    parser.add_argument("--redis-host", type=str, default=os.getenv("REDIS_HOST", "localhost"))
-    parser.add_argument("--redis-port", type=int, default=int(os.getenv("REDIS_PORT", 6379)))
-    parser.add_argument("--tokenizer-model", type=str, default=os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
-    parser.add_argument(
-        "--no-cleanup",
-        action="store_true",
-        help="Do not delete ingested keys after ingest benchmark",
-    )
+    cfg = Config(load=True)
 
-    args = parser.parse_args()
-
-    if args.mode == "ingest":
+    if cfg.PERF_RUNNER.MODE == "ingest":
         run_ingest(
-            args.documents_path,
-            args.batch_size,
-            args.redis_host,
-            args.redis_port,
-            cleanup=(not args.no_cleanup),
+            cfg.PERF_RUNNER.DOCUMENTS_PATH,
+            cfg.PERF_RUNNER.BATCH_SIZE,
+            cfg.REDIS_HOST,
+            cfg.REDIS_PORT,
+            cleanup=cfg.PERF_RUNNER.CLEANUP,
         )
-    elif args.mode == "query":
-        run_query(args.queries_path, args.iterations, args.redis_host, args.redis_port, args.tokenizer_model)
+    elif cfg.PERF_RUNNER.MODE == "query":
+        run_query(cfg.PERF_RUNNER.QUERIES_PATH, cfg.PERF_RUNNER.ITERATIONS, cfg.REDIS_HOST, cfg.REDIS_PORT, cfg.TOKENIZER.BACKEND)
     else:
-        raise ValueError(f"Invalid mode: {args.mode}")
+        raise ValueError(f"Invalid mode: {cfg.PERF_RUNNER.MODE}")
 
 
 if __name__ == "__main__":

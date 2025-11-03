@@ -5,6 +5,7 @@ import os
 from transformers import AutoTokenizer
 from redis.commands.json.path import Path
 from perf.simple_perf import perf_indicator
+from utils.config import Config
 
 
 def connect_to_redis(host='localhost', port=6379):
@@ -47,8 +48,9 @@ def search_documents(redis_client, query):
     return out_matches
 
 def main():
-    redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
-    tokenizer = AutoTokenizer.from_pretrained(os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
+    cfg = Config(load=True)
+    redis_client = connect_to_redis(cfg.REDIS_HOST, cfg.REDIS_PORT)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.TOKENIZER.BACKEND)
     
     while True:
         print("\nEnter your search query (or 'quit' to exit):")
