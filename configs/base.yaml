@@ -1,0 +1,15 @@
+
+
+REDIS_HOST: localhost
+REDIS_PORT: 6379
+DOCUMENTS: "msmarco-docs.tsv"
+
+TOKENIZER:
+  MIN_LEN: 2
+  BACKEND: "simple"  # options: "simple", "spacy"
+  LOWERCASE: true
+  ASCII_FOLD: true
+  REMOVE_STOPWORDS: true
+  STEM: false
+  NUMBER_NORMALIZE: true
+  SPACY_MODEL: "blank"
