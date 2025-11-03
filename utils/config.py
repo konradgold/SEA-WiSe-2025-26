@@ -30,7 +30,7 @@ class Config(object):
             cfg_dict = self._merge_cfg_from_base(cfg_base, cfg_dict)
             self.cfg_dict = cfg_dict
 
-        self._update_dict(cfg_dict)
+        self.update_dict(cfg_dict)
 
     def _parse_args(self):
         """
@@ -215,7 +215,7 @@ class Config(object):
             
         return cfg
     
-    def _update_dict(self, cfg_dict):
+    def update_dict(self, cfg_dict):
         """
         Set the dict to be attributes of the config recurrently.
         Args:
@@ -238,6 +238,13 @@ class Config(object):
         Returns the read arguments.
         """
         return self.args
+    
+    def __getattr__(self, name):
+        """
+        Return None for any missing attribute instead of raising AttributeError.
+        This makes accessing cfg.NON_EXISTANT_KEY return None.
+        """
+        return None
     
     def __repr__(self):
         return "{}\n".format(self.dump())
