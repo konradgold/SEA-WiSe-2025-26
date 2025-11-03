@@ -15,11 +15,24 @@ def _read_queries(path: str) -> List[str]:
 
 
 @perf_indicator("ingest", "docs")
-def run_ingest(documents_path: str, batch_size: int, redis_host: str, redis_port: int):
+def run_ingest(
+    documents_path: str,
+    batch_size: int,
+    redis_host: str,
+    redis_port: int,
+    cleanup: bool = True,
+):
     db = connect_to_db(redis_host, redis_port)
     try:
         ingestion = Ingestion(db, [MinimalProcessor()], documents_path)
-        ingestion.ingest(batch_size)
+        inserted_keys = ingestion.ingest(batch_size)
+        # Cleanup newly inserted keys if requested
+        if cleanup and inserted_keys:
+            pipe = db.pipeline()
+            for k in inserted_keys:
+                pipe.delete(k)
+            deleted = sum(int(bool(r)) for r in pipe.execute())
+            print(f"[cleanup] deleted {deleted} keys")
         return None, batch_size
     finally:
         db.close()
@@ -54,11 +67,22 @@ def main():
     parser.add_argument("--redis-host", type=str, default=os.getenv("REDIS_HOST", "localhost"))
     parser.add_argument("--redis-port", type=int, default=int(os.getenv("REDIS_PORT", 6379)))
     parser.add_argument("--tokenizer-model", type=str, default=os.getenv("TOKENIZER_MODEL", "bert-base-cased"))
+    parser.add_argument(
+        "--no-cleanup",
+        action="store_true",
+        help="Do not delete ingested keys after ingest benchmark",
+    )
 
     args = parser.parse_args()
 
     if args.mode == "ingest":
-        run_ingest(args.documents_path, args.batch_size, args.redis_host, args.redis_port)
+        run_ingest(
+            args.documents_path,
+            args.batch_size,
+            args.redis_host,
+            args.redis_port,
+            cleanup=(not args.no_cleanup),
+        )
     elif args.mode == "query":
         run_query(args.queries_path, args.iterations, args.redis_host, args.redis_port, args.tokenizer_model)
     else:
@@ -67,5 +91,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
