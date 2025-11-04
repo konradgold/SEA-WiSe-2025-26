@@ -20,7 +20,7 @@ dotenv.load_dotenv()
 r = redis.Redis(
     host=os.getenv("REDIS_HOST_PROD", 
             'seenar.cloud.sci.hpi.de'), 
-    port=os.getenv("REDIS_PORT", 6379) 
+    port=os.getenv("REDIS_PORT", 6379), 
     password=os.getenv("REDIS_PW", None))
 
 r.ping()
