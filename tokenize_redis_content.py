@@ -126,8 +126,16 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
 
 
 
-def connect_to_db(host: str, port: int, passwort=None):
-    return redis.Redis(host=host, port=port, passwort=passwort, decode_responses=True)
+def connect_to_db(cfg):
+    if cfg.REDIS_PROD.USE:
+        host = cfg.REDIS_PROD.HOST
+        port = cfg.REDIS_PROD.PORT
+        password = os.getenv("REDIS_PROD_PASSWORD", None)
+    else:
+        host = cfg.REDIS_HOST
+        port = cfg.REDIS_PORT
+        password = None
+    return redis.Redis(host=host, port=port, password=password, decode_responses=True)
 
 
 @perf_indicator("tokenize_docs", "docs")
@@ -138,7 +146,7 @@ def main():
       cfg.TOKENIZER.WORKERS = (os.cpu_count() or 2) // 2
       
 
-    db = connect_to_db(cfg.REDIS_HOST, cfg.REDIS_PORT)
+    db = connect_to_db(cfg)
     pipe = db.pipeline()
     num_docs_processed = 0
     local_tokenizer = get_tokenizer()

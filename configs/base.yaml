@@ -13,8 +13,6 @@ TOKENIZER:
   STORE_POSITIONS: true
   STORE_TOKENS: true
 
-
-
 REDIS_HOST: "localhost"
 REDIS_PORT: 6379
 DOCUMENTS: "msmarco-docs.tsv"
