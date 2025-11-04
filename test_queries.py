@@ -1,5 +1,4 @@
 import unittest
-
 from query_parser import QueryParser
 from query_operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from query_operator_specs import Operators

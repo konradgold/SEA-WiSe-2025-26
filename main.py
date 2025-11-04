@@ -2,8 +2,7 @@ import json
 import redis
 import sys
 import os
-from transformers import AutoTokenizer
-from redis.commands.json.path import Path
+from tokenization import get_tokenizer
 from perf.simple_perf import perf_indicator
 from utils.config import Config
 
@@ -21,19 +20,23 @@ def connect_to_redis(host='localhost', port=6379):
 
 @perf_indicator("search", "queries")
 def search_documents(redis_client, query):
-    # This assumes documents are stored with keys like 'doc:1', 'doc:2', etc.
-    # and contain text content
+    # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
     matches = None  
     keys = ["token:" + str(token) for token in query]
     for key in keys:
-        content = redis_client.json().get(key, Path.root_path())
-        doc_keys = set(content.get("documents", {}).keys()) if content else set()
+        # Hash postings: field = doc_id, value = tf
+        postings = redis_client.hgetall(key)
+        if not postings:
+            # AND semantics: if any token has no postings, result is empty
+            matches = set()
+            break
+        doc_ids = set(postings.keys())
         if matches is None:
-            matches = set(doc_keys)
+            matches = doc_ids
         else:
-            matches.intersection_update(doc_keys)
-        if matches is not None and len(matches) == 0:
-            # AND means no result if any token has no matches
+            matches.intersection_update(doc_ids)
+        if not matches:
+            # Early exit if intersection is empty
             break
     if not matches:
         return []
@@ -42,16 +45,14 @@ def search_documents(redis_client, query):
         doc_content = redis_client.get(match)
         if doc_content:
             doc_json = json.loads(doc_content)
-            out_matches.append(
-                (match, doc_json.get("title", ""), doc_json.get("link", ""))
-            )
+            out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
     return out_matches
 
 def main():
     cfg = Config(load=True)
     redis_client = connect_to_redis(cfg.REDIS_HOST, cfg.REDIS_PORT)
-    tokenizer = AutoTokenizer.from_pretrained(cfg.TOKENIZER.BACKEND)
-    
+    tokenizer = get_tokenizer()
+
     while True:
         print("\nEnter your search query (or 'quit' to exit):")
         query = input("> ")
@@ -60,11 +61,10 @@ def main():
         if not query:
             continue
 
-        query = tokenizer.encode(query)
-        
-        
+        query = tokenizer.tokenize(query)
+
         results = search_documents(redis_client, query)
-        
+
         if results:
             for key, title, link in results:
                 print(f"\n{key}:")
