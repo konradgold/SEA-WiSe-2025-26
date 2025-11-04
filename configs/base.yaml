@@ -7,6 +7,7 @@ TOKENIZER:
   STEM: false
   NUMBER_NORMALIZE: true
   SPACY_MODEL: "blank"
+  SPACY_DISABLE: null
   NUM_WORKERS: 1 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 1000
   FLUSH_EVERY: 50
