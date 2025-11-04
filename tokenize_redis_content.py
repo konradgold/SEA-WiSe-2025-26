@@ -3,10 +3,17 @@ from dotenv import load_dotenv
 import os
 import redis
 import json
+import logging
 from tokenization import get_tokenizer
 import multiprocessing as mp
 from perf.simple_perf import perf_indicator
 from collections import Counter
+
+
+logging.basicConfig(level=logging.INFO)
+# Derive logger name from filename
+_module_name = os.path.splitext(os.path.basename(__file__))[0]
+logger = logging.getLogger(_module_name)
 
 _WORKER_TOKENIZER = None
 
@@ -177,7 +184,7 @@ def connect_to_db(host: str, port: int):
     return redis.Redis(host=host, port=port, decode_responses=True)
 
 
-@perf_indicator("tokenize_docs", "docs")
+@perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
     args = parse_arguments()
@@ -191,7 +198,7 @@ def main():
         if args.workers > 1
         else None
     )
-    print(f"[tokenize_redis_content] Using {args.workers} workers")
+    logger.info(f"Using {args.workers} workers")
 
     batch_keys = []
     for doc_key in iter_doc_keys(db, args.scan_count):
@@ -210,7 +217,7 @@ def main():
         pool.close()
         pool.join()
 
-    print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
+    return None, num_docs_processed
 
 
 if __name__ == "__main__":
