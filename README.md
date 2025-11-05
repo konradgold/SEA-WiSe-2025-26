@@ -44,6 +44,9 @@ Ingest documents naively using:
 ```python
 uv run python -m sea.ingest.pipeline
 ```
+
+Possible issue if conda env active: Source current environment (`source .venv/bin/active`)
+
 Create the inverted index:
 ```python
 # Run with --no-store-positions to only store term frequencies
