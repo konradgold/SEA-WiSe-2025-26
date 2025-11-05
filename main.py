@@ -4,6 +4,7 @@ import sys
 import os
 from tokenization import get_tokenizer
 from perf.simple_perf import perf_indicator
+from utils.config import Config
 
 
 def connect_to_redis(host='localhost', port=6379):
@@ -48,7 +49,8 @@ def search_documents(redis_client, query):
     return out_matches
 
 def main():
-    redis_client = connect_to_redis(os.getenv("REDIS_HOST", "localhost"), int(os.getenv("REDIS_PORT", 6379)))
+    cfg = Config(load=True)
+    redis_client = connect_to_redis(cfg.REDIS_HOST, cfg.REDIS_PORT)
     tokenizer = get_tokenizer()
 
     while True:

@@ -1,4 +1,3 @@
-import argparse
 from dotenv import load_dotenv
 import os
 import redis
@@ -6,6 +5,7 @@ import json
 from tokenization import get_tokenizer
 import multiprocessing as mp
 from perf.simple_perf import perf_indicator
+from utils.config import Config
 from collections import Counter
 
 _WORKER_TOKENIZER = None
@@ -15,12 +15,10 @@ def _init_worker():
     global _WORKER_TOKENIZER
     _WORKER_TOKENIZER = get_tokenizer()
 
-
 def _tokenize_doc(payload):
     key, body = payload
     tok = _WORKER_TOKENIZER or get_tokenizer()
     return key, tok.tokenize(body)
-
 
 def iter_doc_keys(db, scan_count):
     for redis_key in db.scan_iter(match="D*", count=scan_count):
@@ -110,15 +108,15 @@ def write_postings(postings_by_token, pipe):
         pipe.hset(token_key, mapping=mapping)
 
 
-def process_batch(db, pipe, batch_keys, args, pool, local_tokenizer):
+def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
     docs = load_documents(db, batch_keys)
     if not docs:
         return 0
 
     tokenized = tokenize_documents(docs, pool, local_tokenizer)
-    postings_by_token = build_postings(tokenized, args.store_positions)
+    postings_by_token = build_postings(tokenized, cfg.TOKENIZER.STORE_POSITIONS)
 
-    if args.store_tokens:
+    if cfg.TOKENIZER.STORE_TOKENS:
         update_documents_with_tokens(db, docs, tokenized, pipe)
 
     write_postings(postings_by_token, pipe)
@@ -126,91 +124,57 @@ def process_batch(db, pipe, batch_keys, args, pool, local_tokenizer):
     return len(tokenized)
 
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description="Tokenize documents in Redis")
-    parser.add_argument(
-        "--redis-port",
-        type=int,
-        default=int(os.getenv("REDIS_PORT", 6379)),
-        help="Redis server port",
-    )
-    parser.add_argument(
-        "--flush-every",
-        type=int,
-        default=50,
-        help="number of documents per pipeline execute (default: 50)",
-    )
-    parser.add_argument(
-        "--scan-count",
-        type=int,
-        default=1000,
-        help="hint for SCAN iteration batch size (default: 1000)",
-    )
-    parser.add_argument(
-        "--store-tokens",
-        action="store_true",
-        help="store token list inside each document (default: False)",
-    )
-    # Toggle storing positional indices in postings (default: True)
-    parser.add_argument(
-        "--store-positions",
-        dest="store_positions",
-        action="store_true",
-        help="store positional indices per token (default: True)",
-    )
-    parser.add_argument(
-        "--no-store-positions",
-        dest="store_positions",
-        action="store_false",
-        help="do not store positions; store only term frequencies",
-    )
-    parser.set_defaults(store_positions=True)
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=max(1, (os.cpu_count() or 2) // 2),
-        help="number of parallel worker processes for tokenization",
-    )
-    return parser.parse_args()
 
-def connect_to_db(host: str, port: int):
-    return redis.Redis(host=host, port=port, decode_responses=True)
+def connect_to_db(cfg):
+    if cfg.REDIS_PROD.USE:
+        host = cfg.REDIS_PROD.HOST
+        port = cfg.REDIS_PROD.PORT
+        password = os.getenv("REDIS_PROD_PASSWORD", None)
+    else:
+        host = cfg.REDIS_HOST
+        port = cfg.REDIS_PORT
+        password = None
+    return redis.Redis(host=host, port=port, password=password, decode_responses=True)
 
 
 @perf_indicator("tokenize_docs", "docs")
 def main():
     load_dotenv()
-    args = parse_arguments()
+    cfg = Config(load=True)
+    if cfg.TOKENIZER.NUM_WORKERS == 0:
+      cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
+      
 
-    db = connect_to_db("localhost", args.redis_port)
+    db = connect_to_db(cfg)
     pipe = db.pipeline()
     num_docs_processed = 0
     local_tokenizer = get_tokenizer()
     pool = (
-        mp.Pool(processes=args.workers, initializer=_init_worker)
-        if args.workers > 1
+        mp.Pool(processes=cfg.TOKENIZER.NUM_WORKERS, initializer=_init_worker)
+        if cfg.TOKENIZER.NUM_WORKERS > 1
         else None
     )
-    print(f"[tokenize_redis_content] Using {args.workers} workers")
+    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} workers")
 
     batch_keys = []
-    for doc_key in iter_doc_keys(db, args.scan_count):
+    for doc_key in iter_doc_keys(db, cfg.TOKENIZER.SCAN_COUNT):
         batch_keys.append(doc_key)
-        if len(batch_keys) >= args.flush_every:
+        if len(batch_keys) >= cfg.TOKENIZER.FLUSH_EVERY:
             num_docs_processed += process_batch(
-                db, pipe, batch_keys, args, pool, local_tokenizer
+                db, pipe, batch_keys, cfg, pool, local_tokenizer
             )
             batch_keys = []
 
     if batch_keys:
         num_docs_processed += process_batch(
-            db, pipe, batch_keys, args, pool, local_tokenizer
+            db, pipe, batch_keys, cfg, pool, local_tokenizer
         )
     if pool:
         pool.close()
         pool.join()
 
     print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
+    return num_docs_processed
 
 
 if __name__ == "__main__":

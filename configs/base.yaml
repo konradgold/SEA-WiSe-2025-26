@@ -1,0 +1,36 @@
+TOKENIZER:
+  MIN_LEN: 2
+  BACKEND: "simple"  # options: "simple", "spacy"
+  LOWERCASE: true
+  ASCII_FOLD: true
+  REMOVE_STOPWORDS: true
+  STEM: false
+  NUMBER_NORMALIZE: true
+  SPACY_MODEL: "blank"
+  SPACY_DISABLE: null
+  NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
+  SCAN_COUNT: 1000
+  FLUSH_EVERY: 50
+  STORE_POSITIONS: true
+  STORE_TOKENS: true
+
+REDIS_HOST: "localhost"
+REDIS_PORT: 6379
+DOCUMENTS: "msmarco-docs.tsv"
+REDIS_PROD: 
+  HOST: "seenar.cloud.sci.hpi.de"
+  PORT: 6379
+  USE: false
+
+INGESTION:
+  NUM_DOCUMENTS: 300
+  BATCH_SIZE: 100
+
+PERF_RUNNER:
+  MODE: "ingest" # "ingest" or "query"
+  DOCUMENTS_PATH: "msmarco-docs.tsv"
+  BATCH_SIZE: 400
+  ITERATIONS: 100
+  CLEANUP: true
+  QUERIES_PATH: "queries/sample_queries.txt"
+
