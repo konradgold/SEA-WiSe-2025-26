@@ -1,12 +1,10 @@
 import enum
 import json
 from typing import Any
-import argparse
 import redis
-from dotenv import load_dotenv
-import os
 from perf.simple_perf import perf_indicator
 import logging
+from utils.config import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -106,24 +104,12 @@ def connect_to_db(host: str, port: int):
     return redis.Redis(host=host, port=port)
 
 def main():
-    load_dotenv()
-    parser = argparse.ArgumentParser(description='Ingest documents into Redis')
-    parser.add_argument('--num-documents', type=int, default=200,
-                      help='number of documents to ingest (default: 400)')
-    parser.add_argument('--batch-size', type=int, default=100,
-                      help='number of documents per batch (default: 100)')
-    parser.add_argument('--documents-path', type=str, default=os.getenv("DOCUMENTS", "msmarco-docs.tsv"),
-                      help='path to the documents file')
-    parser.add_argument('--redis-port', type=int, default=int(os.getenv("REDIS_PORT", 6379)),
-                      help='Redis server port')
-    args = parser.parse_args()
+    cfg = Config(load=True)
 
-    documents_path = args.documents_path
-    redis_port = args.redis_port
 
-    db = connect_to_db("localhost", redis_port)
-    ingestion = Ingestion(db, [MinimalProcessor()], documents_path)
-    ingestion.ingest(args.num_documents, args.batch_size)
+    db = connect_to_db(cfg.REDIS_HOST, cfg.REDIS_PORT)
+    ingestion = Ingestion(db, [MinimalProcessor()], cfg.DOCUMENTS)
+    ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
     db.close()
 
 if __name__ == "__main__":
