@@ -1,5 +1,10 @@
 import time
 from typing import Any, Callable
+import logging
+
+logging.basicConfig(level=logging.INFO)
+# Use dedicated logger for performance indicators
+logger = logging.getLogger("perf")
 
 
 def perf_indicator(label: str, unit: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
@@ -22,13 +27,11 @@ def perf_indicator(label: str, unit: str) -> Callable[[Callable[..., Any]], Call
                 payload, count = result  # unpack (payload, count)
 
             rate_per_min = (count / elapsed_s) * 60.0 if elapsed_s > 0 else float("inf")
-            print(
-                f"[{label}] {int(count)} {unit} in {elapsed_s*1000:.2f} ms ({rate_per_min:.1f} {unit}/min)"
+            logger.info(
+                f"{label} {int(count)} {unit} in {elapsed_s*1000:.2f} ms ({rate_per_min:.1f} {unit}/min)"
             )
             return payload
 
         return _wrapper
 
     return _decorator
-
-
