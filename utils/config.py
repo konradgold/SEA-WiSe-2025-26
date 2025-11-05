@@ -1,4 +1,5 @@
 import os
+from typing import Any, Optional
 import yaml
 import json
 import copy
@@ -13,18 +14,23 @@ class Config(object):
     It automatically loads from a hierarchy of config files and turns the keys to the 
     class attributes. 
     """
-    def __init__(self, load=True, cfg_dict=None):
+    def __init__(self, load=True, cfg_dict=None, path: Optional[str]="configs/base.yaml"):
         """
         Args: 
             load (bool): whether or not yaml is needed to be loaded.
             cfg_dict (dict): dictionary of configs to be updated into the attributes
         """
         if load:
-            self.args = self._parse_args()
-            print("Loading config from {}.".format(self.args.cfg_file))
+            if path is None:
+                args = self._parse_args()
+                self.cfg_file = args.cfg_file
+            else:
+                self.cfg_file = path
+
+            print("Loading config from {}.".format(self.cfg_file))
             self.need_initialization = True
             cfg_base = self._initialize_cfg()
-            cfg_dict = self._load_yaml(self.args)
+            cfg_dict = self._load_yaml(self.cfg_file)
             cfg_dict = self._merge_cfg_from_base(cfg_base, cfg_dict)
             self.cfg_dict = cfg_dict
 
@@ -72,21 +78,21 @@ class Config(object):
                 logging.warning("Base config file not found at {}. Skipping base config loading.".format(base_path))
         return cfg
     
-    def _load_yaml(self, args, file_name=""):
+    def _load_yaml(self, cfg_file, file_name=""):
         """
         Load the specified yaml file.
         Args:
             args: parsed args by `self._parse_args`.
             file_name (str): the file name to be read from if specified.
         """
-        assert args.cfg_file is not None
+        assert cfg_file is not None
         if not file_name == "": # reading from base file
             with open(file_name, 'r') as f:
                 cfg = yaml.load(f.read(), Loader=yaml.SafeLoader)
         else: # reading from top file
-            with open(args.cfg_file, 'r') as f:
+            with open(cfg_file, 'r') as f:
                 cfg = yaml.load(f.read(), Loader=yaml.SafeLoader)
-                file_name = args.cfg_file
+                file_name = cfg_file
 
         if "_BASE_RUN" not in cfg.keys() and "_BASE_MODEL" not in cfg.keys() and "_BASE" not in cfg.keys():
             # return cfg if the base file is being accessed
@@ -100,9 +106,9 @@ class Config(object):
             else:
                 cfg_base_file = cfg["_BASE"].replace(
                     "./", 
-                    args.cfg_file.replace(args.cfg_file.split('/')[-1], "")
+                    cfg_file.replace(cfg_file.split('/')[-1], "")
                 )
-            cfg_base = self._load_yaml(args, cfg_base_file)
+            cfg_base = self._load_yaml(cfg_file, cfg_base_file)
             cfg = self._merge_cfg_from_base(cfg_base, cfg)
         else:
             # load the base run and the base model file of the current config file
@@ -113,9 +119,9 @@ class Config(object):
                 else:
                     cfg_base_file = cfg["_BASE_RUN"].replace(
                         "./", 
-                        args.cfg_file.replace(args.cfg_file.split('/')[-1], "")
+                        cfg_file.replace(cfg_file.split('/')[-1], "")
                     )
-                cfg_base = self._load_yaml(args, cfg_base_file)
+                cfg_base = self._load_yaml(cfg_file, cfg_base_file)
                 cfg = self._merge_cfg_from_base(cfg_base, cfg, preserve_base=True)
             if "_BASE_MODEL" in cfg.keys():
                 if cfg["_BASE_MODEL"][1] == '.':
@@ -124,11 +130,11 @@ class Config(object):
                 else:
                     cfg_base_file = cfg["_BASE_MODEL"].replace(
                         "./", 
-                        args.cfg_file.replace(args.cfg_file.split('/')[-1], "")
+                        cfg_file.replace(cfg_file.split('/')[-1], "")
                     )
-                cfg_base = self._load_yaml(args, cfg_base_file)
+                cfg_base = self._load_yaml(cfg_file, cfg_base_file)
                 cfg = self._merge_cfg_from_base(cfg_base, cfg)
-        cfg = self._merge_cfg_from_command(args, cfg)
+        cfg = self._merge_cfg_from_command(cfg_file, cfg)
         return cfg
     
     def _merge_cfg_from_base(self, cfg_base, cfg_new, preserve_base=False):
@@ -235,9 +241,9 @@ class Config(object):
         """
         Returns the read arguments.
         """
-        return self.args
+        return self.cfg_file
     
-    def __getattr__(self, name):
+    def __getattr__(self, name) -> Any:
         """
         Return None for any missing attribute instead of raising AttributeError.
         This makes accessing cfg.NON_EXISTANT_KEY return None.

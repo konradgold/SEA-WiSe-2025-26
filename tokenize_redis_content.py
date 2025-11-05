@@ -174,6 +174,7 @@ def main():
         pool.join()
 
     print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
+    return num_docs_processed
 
 
 if __name__ == "__main__":

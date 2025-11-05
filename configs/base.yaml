@@ -8,7 +8,7 @@ TOKENIZER:
   NUMBER_NORMALIZE: true
   SPACY_MODEL: "blank"
   SPACY_DISABLE: null
-  NUM_WORKERS: 1 # set to 0 to use os.cpu_count()
+  NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 1000
   FLUSH_EVERY: 50
   STORE_POSITIONS: true
@@ -18,12 +18,12 @@ REDIS_HOST: "localhost"
 REDIS_PORT: 6379
 DOCUMENTS: "msmarco-docs.tsv"
 REDIS_PROD: 
-  HOST: ""
+  HOST: "seenar.cloud.sci.hpi.de"
   PORT: 6379
   USE: false
 
 INGESTION:
-  NUM_DOCUMENTS: 200
+  NUM_DOCUMENTS: 300
   BATCH_SIZE: 100
 
 PERF_RUNNER:
