@@ -116,7 +116,7 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
     tokenized = tokenize_documents(docs, pool, local_tokenizer)
     postings_by_token = build_postings(tokenized, cfg.TOKENIZER.STORE_POSITIONS)
 
-    if args.TOKENIZER.STORE_TOKENS:
+    if cfg.TOKENIZER.STORE_TOKENS:
         update_documents_with_tokens(db, docs, tokenized, pipe)
 
     write_postings(postings_by_token, pipe)
@@ -141,8 +141,8 @@ def connect_to_db(cfg):
 def main():
     load_dotenv()
     cfg = Config(load=True)
-    if cfg.TOKENIZER.WORKERS == 0:
-      cfg.TOKENIZER.WORKERS = (os.cpu_count() or 2) // 2
+    if cfg.TOKENIZER.NUM_WORKERS == 0:
+      cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
       
 
     db = connect_to_db(cfg)
@@ -150,11 +150,11 @@ def main():
     num_docs_processed = 0
     local_tokenizer = get_tokenizer()
     pool = (
-        mp.Pool(processes=cfg.TOKENIZER.WORKERS, initializer=_init_worker)
-        if cfg.TOKENIZER.WORKERS > 1
+        mp.Pool(processes=cfg.TOKENIZER.NUM_WORKERS, initializer=_init_worker)
+        if cfg.TOKENIZER.NUM_WORKERS > 1
         else None
     )
-    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.WORKERS} workers")
+    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} workers")
 
     batch_keys = []
     for doc_key in iter_doc_keys(db, cfg.TOKENIZER.SCAN_COUNT):

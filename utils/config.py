@@ -13,14 +13,12 @@ class Config(object):
     It automatically loads from a hierarchy of config files and turns the keys to the 
     class attributes. 
     """
-    def __init__(self, load=True, cfg_dict=None, cfg_level=None):
+    def __init__(self, load=True, cfg_dict=None):
         """
         Args: 
             load (bool): whether or not yaml is needed to be loaded.
             cfg_dict (dict): dictionary of configs to be updated into the attributes
-            cfg_level (int): indicating the depth level of the config
         """
-        self._level = "cfg" + ("." + cfg_level if cfg_level is not None else "")
         if load:
             self.args = self._parse_args()
             print("Loading config from {}.".format(self.args.cfg_file))
@@ -224,7 +222,7 @@ class Config(object):
         """
         def recur(key, elem):
             if type(elem) is dict:
-                return key, Config(load=False, cfg_dict=elem, cfg_level=key)
+                return key, Config(load=False, cfg_dict=elem)
             else:
                 if type(elem) is str and elem[1:3]=="e-":
                     elem = float(elem)
