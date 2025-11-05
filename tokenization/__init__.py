@@ -2,6 +2,8 @@ import re
 import unicodedata
 import os
 from dataclasses import dataclass
+
+from utils.config import Config
 from .stopwords import get_default_stopwords
 
 
@@ -99,20 +101,20 @@ def get_tokenizer() -> TokenizerAbstract:
     from .simple_tokenizer import SimpleTokenizer
     from .spacy_tokenizer import SpacyTokenizer
     
-    backend_name = _default_backend()
+    imported_config = Config()
     cfg = TokenizerConfig(
-        lowercase=_env_bool("TOKENIZER_LOWERCASE", True),
-        ascii_fold=_env_bool("TOKENIZER_ASCII_FOLD", True),
-        min_len=int(os.getenv("TOKENIZER_MIN_LEN", "2")),
-        remove_stopwords=_env_bool("TOKENIZER_REMOVE_STOPWORDS", True),
-        stemming=_env_bool("TOKENIZER_STEM", False),
-        number_normalize=_env_bool("TOKENIZER_NUMBER_NORMALIZE", True),
+        lowercase=imported_config.TOKENIZER.LOWERCASE,
+        ascii_fold=imported_config.TOKENIZER.ASCII_FOLD,
+        min_len=imported_config.TOKENIZER.MIN_LEN,
+        remove_stopwords=imported_config.TOKENIZER.REMOVE_STOPWORDS,
+        stemming=imported_config.TOKENIZER.STEM,
+        number_normalize=imported_config.TOKENIZER.NUMBER_NORMALIZE,
     )
     stop = get_default_stopwords() if cfg.remove_stopwords else set()
 
-    if backend_name == "spacy":
-        model = os.getenv("SPACY_MODEL", "blank")
-        disable = tuple(filter(None, (os.getenv("SPACY_DISABLE", "").split(",") if os.getenv("SPACY_DISABLE") else [])))
+    if imported_config.TOKENIZER.BACKEND == "spacy":
+        model = imported_config.TOKENIZER.SPACY_MODEL
+        disable = tuple(filter(None, (imported_config.TOKENIZER.SPACY_DISABLE.split(",") if imported_config.TOKENIZER.SPACY_DISABLE is not None else [])))
         backend = SpacyTokenizer(
             model=model, disable=list(disable) if disable else None
         )
