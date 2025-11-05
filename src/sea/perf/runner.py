@@ -1,13 +1,10 @@
-import argparse
-import os
 from typing import List
 
-from perf.simple_perf import perf_indicator
 
-from ingestion import Ingestion, MinimalProcessor, connect_to_db
-from search import connect_to_redis, search_documents
-from tokenization import get_tokenizer
-
+from sea.index.tokenization import get_tokenizer
+from sea.ingest.pipeline import Ingestion, MinimalProcessor, connect_to_db
+from sea.perf.simple_perf import perf_indicator
+from sea.query.search import connect_to_redis, search_documents
 from sea.utils.config import Config
 
 

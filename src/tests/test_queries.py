@@ -1,7 +1,8 @@
 import unittest
-from query_parser import QueryParser
-from query_operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
-from query_operator_specs import Operators
+
+from sea.query.operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
+from sea.query.parser import QueryParser
+from sea.query.specs import Operators
 
 
 class TestQueryEngine(unittest.TestCase):
