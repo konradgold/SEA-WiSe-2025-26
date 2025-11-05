@@ -1,5 +1,5 @@
-from query_operators import AbstractOperator
-from query_operator_specs import Operators
+from sea.query.operators import AbstractOperator
+from sea.query.specs import Operators
 
 from typing import Callable, List
 

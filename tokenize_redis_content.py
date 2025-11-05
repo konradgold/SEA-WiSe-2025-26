@@ -6,7 +6,7 @@ import logging
 from tokenization import get_tokenizer
 import multiprocessing as mp
 from perf.simple_perf import perf_indicator
-from utils.config import Config
+from sea.utils.config import Config
 from collections import Counter
 
 

@@ -4,7 +4,7 @@ import sys
 import os
 from tokenization import get_tokenizer
 from perf.simple_perf import perf_indicator
-from utils.config import Config
+from sea.utils.config import Config
 
 
 def connect_to_redis(host='localhost', port=6379):

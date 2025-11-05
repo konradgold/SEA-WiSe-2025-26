@@ -2,7 +2,7 @@ from email.mime import base
 import unittest
 
 import yaml
-from utils.config import Config
+from sea.utils.config import Config
 
 
 class TestConfig(unittest.TestCase):

@@ -4,7 +4,7 @@ from typing import Any
 import redis
 from perf.simple_perf import perf_indicator
 import logging
-from utils.config import Config
+from sea.utils.config import Config
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

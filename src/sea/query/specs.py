@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import NamedTuple
 
-from query_operators import ANDNOTOperator, ANDOperator, AbstractOperator, OROperator, TermOperator, PhraseOperator
+from sea.query.operators import ANDNOTOperator, ANDOperator, AbstractOperator, OROperator, TermOperator, PhraseOperator
 
 class OperatorSpec(NamedTuple):
     identifiers: tuple[str, ...]
