@@ -16,7 +16,7 @@ TOKENIZER:
 
 REDIS_HOST: "localhost"
 REDIS_PORT: 6379
-DOCUMENTS: "msmarco-docs.tsv"
+DOCUMENTS: "data/msmarco-docs.tsv"
 REDIS_PROD: 
   HOST: "seenar.cloud.sci.hpi.de"
   PORT: 6379
@@ -28,7 +28,7 @@ INGESTION:
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"
-  DOCUMENTS_PATH: "msmarco-docs.tsv"
+  DOCUMENTS_PATH: "data/msmarco-docs.tsv"
   BATCH_SIZE: 400
   ITERATIONS: 100
   CLEANUP: true
