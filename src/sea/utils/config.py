@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any, Optional
 import yaml
 import json
@@ -27,6 +28,8 @@ class Config(object):
             else:
                 self.cfg_file = path
 
+            self.cfg_file = self._resolve_cfg_path(self.cfg_file)
+
             print("Loading config from {}.".format(self.cfg_file))
             self.need_initialization = True
             cfg_base = self._initialize_cfg()
@@ -35,6 +38,29 @@ class Config(object):
             self.cfg_dict = cfg_dict
 
         self.update_dict(cfg_dict)
+
+
+    def _find_project_root(self, start: Path | str = __file__) -> Path:
+        """Walk up from `start` to locate the directory containing pyproject.toml."""
+        p = Path(start).resolve()
+        for parent in (p, *p.parents):
+            if (parent / "pyproject.toml").exists():
+                return parent
+        # Fallback: current working dir
+        return Path.cwd().resolve()
+
+    def _resolve_cfg_path(self, user_path: Optional[str]) -> Path:
+        if user_path:
+            return Path(user_path).expanduser().resolve()
+        root = self._find_project_root()
+        repo_cfg = root / "configs" / "base.yaml"
+        if repo_cfg.exists():
+            return repo_cfg
+        raise FileNotFoundError(
+            "No configuration file found. "
+            "Pass path explicitly or place configs/base.yaml in the project root."
+        )
+
 
     def _parse_args(self):
         """

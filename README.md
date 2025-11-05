@@ -36,16 +36,23 @@ wget https://msmarco.z22.web.core.windows.net/msmarcoranking/msmarco-docs.tsv.gz
 
 Recommended: Use .env file for redis port/path to documents
 
+Install sea package into the venv:
+```python
+uv pip install -e .
+```
 Ingest documents naively using:
 ```python
-uv run ingestion.py [--batch-size 500 --documents-path "..." --redis-port xyz]
+uv run python -m sea.ingest.pipeline
 ```
+
+Possible issue if conda env active: Source current environment (`source .venv/bin/active`)
+
 Create the inverted index:
 ```python
 # Run with --no-store-positions to only store term frequencies
-uv run tokenize_redis_content.py
+uv run python -m sea.index.tokenizer_job
 ```
-- Tokenizer configuration is controlled via env variables:
+- Tokenizer configuration is controlled via the base.yaml variables:
   - `TOKENIZER_BACKEND` = `simple` (default) or `spacy`
   - `SPACY_MODEL` = name of spaCy model or `blank`
   - The tokenizer scans documents with keys matching `D*` and writes postings under `token:{token}`.
@@ -53,17 +60,13 @@ uv run tokenize_redis_content.py
 
 Run search:
 ```python
-uv run main.py
+uv run python -m sea.query.search
 ```
 
 ## Performance benchmarking
 
-Performance of key functions is printed automatically. To track the performance of different setups for many documents/queries we can use:
+Performance of key functions is printed automatically. The base.yaml specifies the performance run. To track the performance of different setups for many documents/queries we can use:
 
 ```bash
-# Ingest 1000 docs and return avg docs/min
-python -m perf.runner --mode ingest --batch-size 1000 --documents-path msmarco-docs.tsv
-
-# Query the index, 200 iterations cycling through queries in queries/sample_queries.txt, returns queries/min
-python -m perf.runner --mode query --queries-path queries/sample_queries.txt --iterations 200 
+uv run python -m sea.perf.runner
 ```
