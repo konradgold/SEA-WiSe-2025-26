@@ -58,7 +58,10 @@ def _env_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
     if not isinstance(value, str):
-        return bool(value)
+        try:
+            return bool(value)
+        except Exception:
+            return default
     v = value.strip().lower()
     return v in {"1", "true", "yes", "y", "on"}
 
