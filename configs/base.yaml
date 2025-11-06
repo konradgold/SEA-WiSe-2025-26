@@ -34,3 +34,6 @@ PERF_RUNNER:
   CLEANUP: true
   QUERIES_PATH: "queries/sample_queries.txt"
 
+QUERY:
+  MAX_PHRASE_LEN: 5
+

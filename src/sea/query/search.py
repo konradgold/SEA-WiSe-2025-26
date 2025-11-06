@@ -3,40 +3,17 @@ import redis
 import sys
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
+from sea.query.parser import QueryParser
 from sea.utils.config import Config
-
-
-def connect_to_redis(host='localhost', port=6379):
-    try:
-        # Connect to Redis (adjust host/port if needed)
-        r = redis.Redis(host=host, port=port, decode_responses=True)
-        r.ping()  # Test connection
-        return r
-    except redis.ConnectionError:
-        print("Error: Could not connect to Redis. Make sure Redis server is running.")
-        sys.exit(1)
+from sea.utils.manage_redis import connect_to_db
 
 
 @perf_indicator("search", "queries")
 def search_documents(redis_client, query):
     # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
-    matches = None  
-    keys = ["token:" + str(token) for token in query]
-    for key in keys:
-        # Hash postings: field = doc_id, value = tf
-        postings = redis_client.hgetall(key)
-        if not postings:
-            # AND semantics: if any token has no postings, result is empty
-            matches = set()
-            break
-        doc_ids = set(postings.keys())
-        if matches is None:
-            matches = doc_ids
-        else:
-            matches.intersection_update(doc_ids)
-        if not matches:
-            # Early exit if intersection is empty
-            break
+    query_parser = QueryParser(cfg=Config())
+    root_operator = query_parser.process_phrase2query(query)
+    matches = root_operator.execute(redis_client, get_tokenizer())
     if not matches:
         return []
     out_matches = []
@@ -49,9 +26,7 @@ def search_documents(redis_client, query):
 
 def main():
     cfg = Config(load=True)
-    redis_client = connect_to_redis(cfg.REDIS_HOST, cfg.REDIS_PORT)
-    tokenizer = get_tokenizer()
-
+    redis_client = connect_to_db(cfg)
     while True:
         print("\nEnter your search query (or 'quit' to exit):")
         query = input("> ")
@@ -59,8 +34,6 @@ def main():
             break
         if not query:
             continue
-
-        query = tokenizer.tokenize(query)
 
         results = search_documents(redis_client, query)
 
@@ -72,7 +45,7 @@ def main():
             print(f"\nFound {len(results)} matches")
         else:
             print("\nNo matches found.")
-        print(f"Tokenized query: {query}")
+        print(f"Query: {query}")
 
 if __name__ == "__main__":
     try:
