@@ -1,6 +1,6 @@
 from abc import abstractmethod
 import re
-from typing import Any
+from typing import Any, Optional
 import unicodedata
 from dataclasses import dataclass
 from .stopwords import get_default_stopwords
@@ -99,14 +99,14 @@ class _ConfiguredTokenizer(TokenizerAbstract):
         return self._post_process_tokens(raw_tokens, self.cfg, self.stopwords)
 
 
-def get_tokenizer() -> TokenizerAbstract:
+def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     # TODO: Get config from yaml
     from .simple_tokenizer import SimpleTokenizer
     from .spacy_tokenizer import SpacyTokenizer
 
-    config_yaml = Config()
+    config_yaml = cfg if cfg is not None else Config()
     backend_name = _default_backend(config_yaml)
-    cfg = TokenizerConfig(
+    tkcfg = TokenizerConfig(
         lowercase=_env_bool(config_yaml.TOKENIZER.LOWERCASE, True),
         ascii_fold=_env_bool(config_yaml.TOKENIZER.ASCII_FOLD, True),
         min_len=int(config_yaml.TOKENIZER.MIN_LEN),
@@ -114,7 +114,7 @@ def get_tokenizer() -> TokenizerAbstract:
         stemming=_env_bool(config_yaml.TOKENIZER.STEM, False),
         number_normalize=_env_bool(config_yaml.TOKENIZER.NUMBER_NORMALIZE, True),
     )
-    stop = get_default_stopwords() if cfg.remove_stopwords else set()
+    stop = get_default_stopwords() if tkcfg.remove_stopwords else set()
 
     if backend_name == "spacy":
         model = config_yaml.TOKENIZER.SPACY_MODEL
@@ -122,8 +122,8 @@ def get_tokenizer() -> TokenizerAbstract:
         backend = SpacyTokenizer(
             model=model, disable=list(disable) if disable else None
         )
-        return _ConfiguredTokenizer(backend=backend, cfg=cfg, stopwords=stop)
-    return SimpleTokenizer(config=cfg, stopwords=stop)
+        return _ConfiguredTokenizer(backend=backend, cfg=tkcfg, stopwords=stop)
+    return SimpleTokenizer(config=tkcfg, stopwords=stop)
 
 
 def __getattr__(name: str):

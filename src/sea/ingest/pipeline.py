@@ -5,6 +5,7 @@ import redis
 from sea.perf.simple_perf import perf_indicator
 import logging
 from sea.utils.config import Config
+from sea.utils.manage_redis import connect_to_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -99,15 +100,12 @@ class Ingestion:
         total_inserted += ingested_now
         return total_inserted
 
-def connect_to_db(host: str, port: int):
-    # Placeholder for database connection logic
-    return redis.Redis(host=host, port=port)
 
 def main():
-    cfg = Config(load=True)
+    cfg = Config(load=True, path="configs/demo.yaml")
 
 
-    db = connect_to_db(cfg.REDIS_HOST, cfg.REDIS_PORT)
+    db = connect_to_db(cfg)
     ingestion = Ingestion(db, [MinimalProcessor()], cfg.DOCUMENTS)
     ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
     db.close()

@@ -134,7 +134,7 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
 @perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
-    cfg = Config(load=True)
+    cfg = Config(load=True, path="configs/demo.yaml")
     if cfg.TOKENIZER.NUM_WORKERS == 0:
       cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
       
@@ -142,7 +142,7 @@ def main():
     db = connect_to_db(cfg)
     pipe = db.pipeline()
     num_docs_processed = 0
-    local_tokenizer = get_tokenizer()
+    local_tokenizer = get_tokenizer(cfg)
     pool = (
         mp.Pool(processes=cfg.TOKENIZER.NUM_WORKERS, initializer=_init_worker)
         if cfg.TOKENIZER.NUM_WORKERS > 1
