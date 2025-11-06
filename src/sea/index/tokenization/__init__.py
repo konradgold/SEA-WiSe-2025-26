@@ -1,15 +1,17 @@
+from abc import abstractmethod
 import re
 import unicodedata
-import os
 from dataclasses import dataclass
 from .stopwords import get_default_stopwords
+from sea.utils.config import Config
 
 
 class TokenizerAbstract:
     """Abstract base class for tokenizers."""
     
+    @abstractmethod
     def tokenize(self, text: str) -> list[str]:
-        raise NotImplementedError("Subclasses should implement this method.")
+        pass
     
     def _post_process_tokens(
         self, tokens: list[str], config: "TokenizerConfig", stopwords: set[str]
@@ -40,8 +42,8 @@ class TokenizerConfig:
     number_normalize: bool = True
 
 
-def _default_backend() -> str:
-    env_backend = os.getenv("TOKENIZER_BACKEND")
+def _default_backend(cfg) -> str:
+    env_backend = cfg.TOKENIZER.BACKEND
     if env_backend:
         return env_backend.lower()
     try:
@@ -51,11 +53,10 @@ def _default_backend() -> str:
         return "simple"
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    v = os.getenv(name)
-    if v is None:
+def _env_bool(value: str, default: bool) -> bool:
+    if value is None:
         return default
-    v = v.strip().lower()
+    v = value.strip().lower()
     return v in {"1", "true", "yes", "y", "on"}
 
 
@@ -99,21 +100,22 @@ def get_tokenizer() -> TokenizerAbstract:
     # TODO: Get config from yaml
     from .simple_tokenizer import SimpleTokenizer
     from .spacy_tokenizer import SpacyTokenizer
-    
-    backend_name = _default_backend()
+
+    config_yaml = Config()
+    backend_name = _default_backend(config_yaml)
     cfg = TokenizerConfig(
-        lowercase=_env_bool("TOKENIZER_LOWERCASE", True),
-        ascii_fold=_env_bool("TOKENIZER_ASCII_FOLD", True),
-        min_len=int(os.getenv("TOKENIZER_MIN_LEN", "2")),
-        remove_stopwords=_env_bool("TOKENIZER_REMOVE_STOPWORDS", True),
-        stemming=_env_bool("TOKENIZER_STEM", False),
-        number_normalize=_env_bool("TOKENIZER_NUMBER_NORMALIZE", True),
+        lowercase=_env_bool(config_yaml.TOKENIZER.LOWERCASE, True),
+        ascii_fold=_env_bool(config_yaml.TOKENIZER.ASCII_FOLD, True),
+        min_len=int(config_yaml.TOKENIZER.MIN_LEN),
+        remove_stopwords=_env_bool(config_yaml.TOKENIZER.REMOVE_STOPWORDS, True),
+        stemming=_env_bool(config_yaml.TOKENIZER.STEM, False),
+        number_normalize=_env_bool(config_yaml.TOKENIZER.NUMBER_NORMALIZE, True),
     )
     stop = get_default_stopwords() if cfg.remove_stopwords else set()
 
     if backend_name == "spacy":
-        model = os.getenv("SPACY_MODEL", "blank")
-        disable = tuple(filter(None, (os.getenv("SPACY_DISABLE", "").split(",") if os.getenv("SPACY_DISABLE") else [])))
+        model = config_yaml.TOKENIZER.SPACY_MODEL
+        disable = tuple(filter(None, (config_yaml.TOKENIZER.SPACY_DISABLE.split(",") if config_yaml.TOKENIZER.SPACY_DISABLE else [])))
         backend = SpacyTokenizer(
             model=model, disable=list(disable) if disable else None
         )
