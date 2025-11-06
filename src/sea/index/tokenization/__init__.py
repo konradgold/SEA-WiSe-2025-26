@@ -103,7 +103,6 @@ class _ConfiguredTokenizer(TokenizerAbstract):
 
 
 def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
-    # TODO: Get config from yaml
     from .simple_tokenizer import SimpleTokenizer
     from .spacy_tokenizer import SpacyTokenizer
 
