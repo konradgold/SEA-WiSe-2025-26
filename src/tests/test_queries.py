@@ -1,15 +1,11 @@
 import unittest
 
-from sea.utils.manage_redis import connect_to_db
 from sea.query.operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from sea.query.parser import QueryParser
 from sea.query.specs import Operators
 from sea.utils.config import Config
 
 CFG = Config()
-# redis_client = connect_to_db(CFG)
-
-
 
 class TestQueryEngine(unittest.TestCase):
     def test_parse_OR_query(self):
@@ -85,17 +81,11 @@ class TestQueryEngine(unittest.TestCase):
         operator_class = Operators.get_EnumOperator("c.a.t")
         self.assertEqual(operator_class, Operators.TERM)
 
-
-
-
-    def test_DEMO_for_execution(self):
+    def test_single_phrase(self):
         engine = QueryParser(CFG)
-        root_operator = engine.process_phrase2query("banana AND banana OR cherry ANDNOT banana")
-        #result = root_operator.execute(redis_client, None)
-        #self.assertIsInstance(result, set)
-        #self.assertTrue(result is not None)
-        #self.assertTrue(all("D" in doc_id for doc_id in result))
-        self.assertTrue(True)  # Placeholder assertion
+        root_operator = engine.process_phrase2query("'hello'")
+        self.assertIsInstance(root_operator, PhraseOperator)
+        self.assertEqual(root_operator.phrase, "'hello'")
 
 
 if __name__ == '__main__':
