@@ -102,7 +102,7 @@ class Ingestion:
 
 
 def main():
-    cfg = Config(load=True, path="configs/demo.yaml")
+    cfg = Config(load=True)
 
 
     db = connect_to_db(cfg)

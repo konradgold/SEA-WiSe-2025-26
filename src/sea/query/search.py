@@ -26,7 +26,7 @@ def search_documents(redis_client, query):
     return out_matches
 
 def main():
-    cfg = Config(load=True, path="configs/demo.yaml")
+    cfg = Config(load=True)
     redis_client = connect_to_db(cfg)
     history = InMemoryHistory()
     session = PromptSession(history=history)

@@ -134,7 +134,7 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
 @perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
-    cfg = Config(load=True, path="configs/demo.yaml")
+    cfg = Config(load=True)
     if cfg.TOKENIZER.NUM_WORKERS == 0:
       cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
       
