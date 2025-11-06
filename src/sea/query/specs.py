@@ -30,7 +30,7 @@ class Operators(Enum):
         for member in cls: 
             if id_ in member.identifiers:
                 return member
-            if member == cls.PHRASE and id_.startswith("'"):
+            if member == cls.PHRASE and id_.startswith("'") and id_.count("'") == 1:
                 return member
             if member == cls.BRACKET and id_.startswith("("):
                 return member
