@@ -1,5 +1,6 @@
 from abc import abstractmethod
 import re
+from typing import Any
 import unicodedata
 from dataclasses import dataclass
 from .stopwords import get_default_stopwords
@@ -53,9 +54,11 @@ def _default_backend(cfg) -> str:
         return "simple"
 
 
-def _env_bool(value: str, default: bool) -> bool:
+def _env_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
+    if not isinstance(value, str):
+        return bool(value)
     v = value.strip().lower()
     return v in {"1", "true", "yes", "y", "on"}
 

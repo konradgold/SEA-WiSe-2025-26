@@ -1,5 +1,6 @@
 import json
-import redis
+from prompt_toolkit import PromptSession
+from prompt_toolkit.history import InMemoryHistory
 import sys
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
@@ -27,13 +28,20 @@ def search_documents(redis_client, query):
 def main():
     cfg = Config(load=True)
     redis_client = connect_to_db(cfg)
+    history = InMemoryHistory()
+    session = PromptSession(history=history)
+
     while True:
-        print("\nEnter your search query (or 'quit' to exit):")
-        query = input("> ")
+        try:
+            query = session.prompt("\nEnter your search query (or 'quit' to exit):\n> ")
+        except EOFError:
+            break  # Exit on Ctrl-D
+
         if query.lower() == 'quit':
             break
         if not query:
             continue
+        history.append_string(query)
 
         results = search_documents(redis_client, query)
 
