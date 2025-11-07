@@ -23,6 +23,7 @@ class QueryParser:
         '''
         Process the query and return the root operator
         '''
+        phrase = phrase.strip()
         phrase_elements = phrase.lower().split(" ")
         return self._process_phraseElements(phrase_elements)
 

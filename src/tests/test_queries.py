@@ -87,6 +87,13 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator, TermOperator)
         self.assertEqual(root_operator.phrase, "'hello'")
 
+    def test_spaces(self):
+        engine = QueryParser(CFG)
+        root_operator = engine.process_phrase2query("cat ")
+        self.assertIsInstance(root_operator, TermOperator)
+        self.assertEqual(root_operator.phrase, "cat")
+
+
 
 if __name__ == '__main__':
     unittest.main()
