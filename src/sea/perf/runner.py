@@ -2,9 +2,10 @@ from typing import List
 
 
 from sea.index.tokenization import get_tokenizer
-from sea.ingest.pipeline import Ingestion, MinimalProcessor, connect_to_db
+from sea.ingest.pipeline import Ingestion, MinimalProcessor
 from sea.perf.simple_perf import perf_indicator
-from sea.query.search import connect_to_redis, search_documents
+from sea.query.search import search_documents
+from sea.storage.interface import get_storage
 from sea.utils.config import Config
 
 
@@ -21,7 +22,7 @@ def run_ingest(
     redis_port: int,
     cleanup: bool = True,
 ):
-    db = connect_to_db(redis_host, redis_port)
+    db = get_storage(cfg=Config())
     try:
         ingestion = Ingestion(db, [MinimalProcessor()], documents_path)
         inserted_keys = ingestion.ingest(batch_size)
@@ -40,7 +41,7 @@ def run_ingest(
 @perf_indicator("query", "queries")
 def run_query(queries_path: str, iterations: int, redis_host: str, redis_port: int):
     queries = _read_queries(queries_path)
-    r = connect_to_redis(redis_host, redis_port)
+    r = get_storage(cfg=Config())
     tokenizer = get_tokenizer()
 
     for i in range(iterations):

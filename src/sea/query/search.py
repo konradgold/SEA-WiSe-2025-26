@@ -5,8 +5,8 @@ import sys
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
 from sea.query.parser import QueryParser
+from sea.storage.interface import get_storage
 from sea.utils.config import Config
-from sea.utils.manage_redis import connect_to_db
 
 
 @perf_indicator("search", "queries")
@@ -27,7 +27,8 @@ def search_documents(redis_client, query):
 
 def main():
     cfg = Config(load=True)
-    redis_client = connect_to_db(cfg)
+    cfg.STORAGE.LOAD_DOCUMENTS = True
+    client = get_storage(cfg)
     history = InMemoryHistory()
     session = PromptSession(history=history)
 
@@ -43,7 +44,7 @@ def main():
             continue
         history.append_string(query)
 
-        results = search_documents(redis_client, query)
+        results = search_documents(client, query)
 
         if results:
             for key, title, link in results:
