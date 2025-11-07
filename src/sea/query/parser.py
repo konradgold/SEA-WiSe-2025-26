@@ -1,4 +1,4 @@
-from sea.query.operators import AbstractOperator, PhraseOperator
+from sea.query.operators import ANDOperator, AbstractOperator, PhraseOperator
 from sea.query.specs import Operators
 
 from typing import Callable, List
@@ -24,6 +24,7 @@ class QueryParser:
         Process the query and return the root operator
         '''
         phrase_elements = phrase.lower().split(" ")
+        phrase_elements = [elem for elem in phrase_elements if elem != ''] # remove empty elements
         return self._process_phraseElements(phrase_elements)
 
     def _process_phraseElements(self, elements : List[str | AbstractOperator]):
@@ -40,8 +41,11 @@ class QueryParser:
                 if clazz == current_operator:
                     elements = self.operator2parser[clazz](idx, elements)   
                 idx += 1
+
+        if (len(elements) != 1) :
+            return ANDOperator(elements)
         return elements[0]
-    
+
     
     # Strategy for AND, OR, ANDNOT operators
     def parse_pre_and_post(self, idx: int, query_elements: List[str | AbstractOperator]) -> List [str | AbstractOperator]:

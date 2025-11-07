@@ -13,7 +13,7 @@ class OperatorSpec(NamedTuple):
 class Operators(Enum):
     BRACKET = OperatorSpec(("("), ANDOperator,    False)
     AND    = OperatorSpec(("and", "&", "&&"), ANDOperator,    False)
-    ANDNOT = OperatorSpec(("andnot", "-"), ANDNOTOperator, False)
+    ANDNOT = OperatorSpec(("andnot", "-", "not"), ANDNOTOperator, False)
     OR     = OperatorSpec(("or", "|", "||"), OROperator,      False)
     # has no identifiers, as any unrecognized token is treated as a TERM
     TERM   = OperatorSpec((),                 TermOperator,    True)
