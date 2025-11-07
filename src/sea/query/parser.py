@@ -23,8 +23,8 @@ class QueryParser:
         '''
         Process the query and return the root operator
         '''
-        phrase = phrase.strip()
         phrase_elements = phrase.lower().split(" ")
+        phrase_elements = [elem for elem in phrase_elements if elem != ''] # remove empty elements
         return self._process_phraseElements(phrase_elements)
 
     def _process_phraseElements(self, elements : List[str | AbstractOperator]):
