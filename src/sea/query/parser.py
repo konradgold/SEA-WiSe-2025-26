@@ -1,4 +1,4 @@
-from sea.query.operators import AbstractOperator
+from sea.query.operators import AbstractOperator, PhraseOperator
 from sea.query.specs import Operators
 
 from typing import Callable, List
@@ -8,7 +8,7 @@ class QueryParser:
 
     operator2parser : dict[Operators, Callable[[int, List [str | AbstractOperator]], List [str | AbstractOperator]]]
 
-    def __init__(self):
+    def __init__(self, cfg):
         self.operator2parser = {
             Operators.BRACKET : self.parse_bracket,
             Operators.AND : self.parse_pre_and_post,
@@ -16,6 +16,7 @@ class QueryParser:
             Operators.ANDNOT : self.parse_pre_and_post,
             Operators.PHRASE : self.parse_phrase,
             Operators.TERM : self.parse_self}
+        self.cfg = cfg
     
 
     def process_phrase2query(self, phrase : str) -> AbstractOperator:
@@ -84,13 +85,15 @@ class QueryParser:
         return query_elements
 
     def parse_phrase(self, idx_start: int, query_elements: List[str | AbstractOperator]) -> List [str | AbstractOperator]:
+        idx_end = idx_start + 1
         for idx_end in range(idx_start + 1, len(query_elements)):
             element = query_elements[idx_end]
             if isinstance(element, str) and "'" in element:
                 break
         phrase = " ".join(query_elements[idx_start:idx_end+1])
-        clazz = Operators.get_AbstractOperator(phrase)
-        query_elements[idx_start] = clazz(phrase)
+        query_element = PhraseOperator(phrase)
+        query_element.seq_len = self.cfg.QUERY.MAX_PHRASE_LEN
+        query_elements[idx_start] = query_element
         # remove used elements
         for _ in range(idx_end - idx_start):
             query_elements.pop(idx_start + 1)

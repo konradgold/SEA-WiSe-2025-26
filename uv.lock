@@ -1457,6 +1457,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "pandas" },
+    { name = "prompt-toolkit" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "redis" },
@@ -1479,6 +1480,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
+    { name = "prompt-toolkit", specifier = ">=3.0.52" },
     { name = "python-dotenv", specifier = ">=0.9.9" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "redis", specifier = ">=6.4.0" },

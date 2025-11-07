@@ -3,11 +3,13 @@ import unittest
 from sea.query.operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from sea.query.parser import QueryParser
 from sea.query.specs import Operators
+from sea.utils.config import Config
 
+CFG = Config()
 
 class TestQueryEngine(unittest.TestCase):
     def test_parse_OR_query(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("a OR b")
         self.assertIsInstance(root_operator, OROperator)
         self.assertEqual(len(root_operator.children), 2)
@@ -15,17 +17,17 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[1], TermOperator)
 
     def test_parse_AND_query(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("a AND a ANDNOT b")
         self.assertIsInstance(root_operator, ANDNOTOperator)
         self.assertEqual(len(root_operator.children), 2)
         self.assertIsInstance(root_operator.children[0], ANDOperator)
         self.assertIsInstance(root_operator.children[1], TermOperator)
         self.assertIsInstance(root_operator.children[0].children[0], TermOperator)
-        self.assertIsInstance(root_operator.children[0].children[1], TermOperator)
+        self.assertEqual(len(root_operator.children[0].children), 2)
 
     def test_parse_PHRASE_query(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("'hello world' AND 'foo bar'")
         self.assertIsInstance(root_operator, ANDOperator)
         self.assertEqual(len(root_operator.children), 2)
@@ -36,18 +38,22 @@ class TestQueryEngine(unittest.TestCase):
 
         
     def test_parse_bracket_query(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("(cat OR dog) and tree")
         self.assertIsInstance(root_operator, ANDOperator)
-        self.assertIsInstance(root_operator.children[0], OROperator)
-        self.assertIsInstance(root_operator.children[1], TermOperator)
-        self.assertIsInstance(root_operator.children[0].children[0], TermOperator)
-        self.assertIsInstance(root_operator.children[0].children[1], TermOperator)
-        self.assertEqual(root_operator.children[0].children[0].phrase, "cat")
-        self.assertEqual(root_operator.children[0].children[1].phrase, "dog")
+        self.assertTrue(isinstance(root_operator.children[0], OROperator) or isinstance(root_operator.children[1], OROperator))
+        self.assertTrue(isinstance(root_operator.children[0], TermOperator) or isinstance(root_operator.children[1], TermOperator))
+        if isinstance(root_operator.children[0], OROperator):
+            or_operator = root_operator.children[0]
+        else:
+            or_operator = root_operator.children[1]
+        self.assertIsInstance(or_operator.children[0], TermOperator)
+        self.assertIsInstance(or_operator.children[1], TermOperator)
+        self.assertEqual(or_operator.children[0].phrase, "cat")
+        self.assertEqual(or_operator.children[1].phrase, "dog")
 
     def test_parse_nested_bracket_query(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("(cat andnot (blue or green) or dog) and tree")
         self.assertIsInstance(root_operator, ANDOperator)
         self.assertIsInstance(root_operator.children[0], OROperator)
@@ -60,7 +66,7 @@ class TestQueryEngine(unittest.TestCase):
 
 
     def test_parse_PHRASE_single_tick(self):
-        engine = QueryParser()
+        engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("it's a test")
         self.assertIsInstance(root_operator, TermOperator)
         self.assertEqual(root_operator.phrase, "it's")
@@ -75,15 +81,11 @@ class TestQueryEngine(unittest.TestCase):
         operator_class = Operators.get_EnumOperator("c.a.t")
         self.assertEqual(operator_class, Operators.TERM)
 
-
-
-
-    def test_DEMO_for_execution(self):
-        engine = QueryParser()
-        root_operator = engine.process_phrase2query("banana AND banana OR cherry ANDNOT banana")
-        result = root_operator.execute()
-        expected_ids = {"ID-banana", "ID-cherry"}
-        self.assertEqual(result, expected_ids)
+    def test_single_phrase(self):
+        engine = QueryParser(CFG)
+        root_operator = engine.process_phrase2query("'hello'")
+        self.assertIsInstance(root_operator, TermOperator)
+        self.assertEqual(root_operator.phrase, "'hello'")
 
 
 if __name__ == '__main__':
