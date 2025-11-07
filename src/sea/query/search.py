@@ -57,7 +57,6 @@ def main():
                 print(f"\n{key}:")
                 print(title)
                 print(link)
-            t1 = time.time()
 
             print(f"\nFound {num_matches} matches in {elapsed:.2f} milliseconds.")
         else:
