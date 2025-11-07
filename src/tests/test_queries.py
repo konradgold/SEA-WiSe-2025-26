@@ -24,7 +24,7 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[0], ANDOperator)
         self.assertIsInstance(root_operator.children[1], TermOperator)
         self.assertIsInstance(root_operator.children[0].children[0], TermOperator)
-        self.assertEqual(len(root_operator.children[0].children), 1)
+        self.assertEqual(len(root_operator.children[0].children), 2)
 
     def test_parse_PHRASE_query(self):
         engine = QueryParser(CFG)
@@ -56,9 +56,9 @@ class TestQueryEngine(unittest.TestCase):
         engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("(cat andnot (blue or green) or dog) and tree")
         self.assertIsInstance(root_operator, ANDOperator)
-        self.assertIsInstance(root_operator.children[1], OROperator)
-        self.assertIsInstance(root_operator.children[0], TermOperator)
-        self.assertIsInstance(root_operator.children[1].children[0], ANDNOTOperator)
+        self.assertIsInstance(root_operator.children[0], OROperator)
+        self.assertIsInstance(root_operator.children[1], TermOperator)
+        self.assertIsInstance(root_operator.children[0].children[0], ANDNOTOperator)
         self.assertIsInstance(root_operator.children[1].children[1], TermOperator)
         self.assertIsInstance(root_operator.children[1].children[0].children[0], TermOperator)
         self.assertIsInstance(root_operator.children[1].children[0].children[1], OROperator)
