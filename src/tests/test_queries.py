@@ -59,9 +59,9 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[0], OROperator)
         self.assertIsInstance(root_operator.children[1], TermOperator)
         self.assertIsInstance(root_operator.children[0].children[0], ANDNOTOperator)
-        self.assertIsInstance(root_operator.children[1].children[1], TermOperator)
-        self.assertIsInstance(root_operator.children[1].children[0].children[0], TermOperator)
-        self.assertIsInstance(root_operator.children[1].children[0].children[1], OROperator)
+        self.assertIsInstance(root_operator.children[0].children[1], TermOperator)
+        self.assertIsInstance(root_operator.children[0].children[0].children[0], TermOperator)
+        self.assertIsInstance(root_operator.children[0].children[0].children[1], OROperator)
 
 
 
