@@ -30,7 +30,7 @@ def perf_indicator(label: str, unit: str) -> Callable[[Callable[..., Any]], Call
             logger.info(
                 f"{label} {int(count)} {unit} in {elapsed_s*1000:.2f} ms ({rate_per_min:.1f} {unit}/min)"
             )
-            return payload
+            return payload, count
 
         return _wrapper
 
