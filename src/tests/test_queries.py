@@ -63,13 +63,13 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[0].children[0].children[0], TermOperator)
         self.assertIsInstance(root_operator.children[0].children[0].children[1], OROperator)
 
-
-
     def test_parse_PHRASE_single_tick(self):
         engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("it's a test")
-        self.assertIsInstance(root_operator, TermOperator)
-        self.assertEqual(root_operator.phrase, "it's")
+        self.assertIsInstance(root_operator, ANDOperator)
+        self.assertEqual(len(root_operator.children), 3)
+        self.assertIsInstance(root_operator.children[0], TermOperator)
+        self.assertListEqual([child.phrase for child in root_operator.children], ["it's", "a", "test"])
 
     def test_operator_identification(self):
         operator_class = Operators.get_EnumOperator("AND")
@@ -92,6 +92,24 @@ class TestQueryEngine(unittest.TestCase):
         root_operator = engine.process_phrase2query("cat ")
         self.assertIsInstance(root_operator, TermOperator)
         self.assertEqual(root_operator.phrase, "cat")
+
+    def test_multiple_terms(self):
+        engine = QueryParser(CFG)
+        root_operator = engine.process_phrase2query("cat dog tree")
+        self.assertIsInstance(root_operator, ANDOperator)
+        self.assertEqual(len(root_operator.children), 3)
+        self.assertIsInstance(root_operator.children[0], TermOperator)
+        self.assertIsInstance(root_operator.children[1], TermOperator)
+        self.assertIsInstance(root_operator.children[2], TermOperator)
+
+    def test_multiple_terms_with_and(self):
+        engine = QueryParser(CFG)
+        root_operator = engine.process_phrase2query("cat AND dog tree")
+        self.assertIsInstance(root_operator, ANDOperator)
+        self.assertEqual(len(root_operator.children), 2)
+        self.assertIsInstance(root_operator.children[0], ANDOperator)
+        self.assertIsInstance(root_operator.children[1], TermOperator)
+
 
 
 
