@@ -51,7 +51,7 @@ def main():
             continue
         history.append_string(query)
         t0 = time.time()
-        results = search_documents(client, query, match_output_result)
+        results, num_matches = search_documents(client, query, max_output_result)
         elapsed = (time.time() - t0)*1000
 
         if results:
