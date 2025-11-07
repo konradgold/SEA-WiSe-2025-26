@@ -61,7 +61,7 @@ class PhraseOperator(AbstractOperator):
     _seq_len: int  # Required matched sequence length, defaults to 2
 
     def __init__(self, phrase: str, seq_len: Optional[int] = None):
-        self._seq_len = seq_len if seq_len is not None else 2
+        self.seq_len = seq_len
         self.phrase = phrase
 
     @property
@@ -71,9 +71,10 @@ class PhraseOperator(AbstractOperator):
         return self._seq_len
 
     @seq_len.setter
-    def seq_len(self, value: int):
+    def seq_len(self, value: Optional[int]):
         if value is None or value < 1:
             self._seq_len = 2
+            return
         if hasattr(self, 'tokens') and value > len(self.tokens):
             self._seq_len = len(self.tokens)
         self._seq_len = value
@@ -83,7 +84,7 @@ class PhraseOperator(AbstractOperator):
             tokenizer = get_tokenizer()
         self.tokens = tokenizer.tokenize(self.phrase)
         if len(self.tokens) < self.seq_len:
-            self._seq_len = len(self.tokens)
+            self.seq_len = len(self.tokens)
         return tokenizer
 
     def execute(self, r, tokenizer: Optional[TokenizerAbstract]=None) -> Optional[set]:
@@ -92,11 +93,11 @@ class PhraseOperator(AbstractOperator):
         if len(self.tokens) == 0:
             logging.warning("No tokens found. Phrase might have been eaten by tokeinzer.")
             return None
-        assert self._seq_len <= len(self.tokens), "Sequence length cannot be greater than number of tokens"
+        assert self.seq_len <= len(self.tokens), "Sequence length cannot be greater than number of tokens"
         tokens = [f"token:{t}" for t in self.tokens if t]
         results = self._get_positions(r, tokens)
 
-        if len(results) < self._seq_len:
+        if len(results) < self.seq_len:
             return set()  # Not enough tokens found
         all_matching_docs = set()
         for i in range(len(results) - self.seq_len + 1):
@@ -122,7 +123,7 @@ class PhraseOperator(AbstractOperator):
         positions_lists = [result_dict[doc_id] for result_dict in window_positions] # contains list of positions for each token in the window for the respective doc_id, sorted
         for pos in positions_lists[0]:
             is_consecutive = True
-            for j in range(1, self._seq_len):
+            for j in range(1, self.seq_len):
                 if not (pos + j) in positions_lists[j]:
                     is_consecutive = False
                     break
@@ -162,7 +163,7 @@ class OROperator(AbstractOperator):
 class ANDOperator(AbstractOperator):
 
     def __init__(self, children: List[AbstractOperator]):
-        self.children = self._simplify_query(children)
+        self.children = children
 
     def execute(self, r, tokenizer: Optional[TokenizerAbstract]=None) -> Optional[set]:
         intersection = set()
@@ -180,19 +181,6 @@ class ANDOperator(AbstractOperator):
         print(f"AND Operator result: {intersection}")
         return intersection
     
-    
-    def _simplify_query(self, children: Sequence[AbstractOperator]) -> Sequence[AbstractOperator]:
-        term = ""
-        simplified_children = []
-        for child in children:
-            if isinstance(child, TermOperator):
-                term  += child.phrase + " "
-            else:
-                simplified_children.append(child)
-        if term != "":
-            combined_term = TermOperator(term)
-            simplified_children = [combined_term] + simplified_children
-        return simplified_children
 
 class ANDNOTOperator(AbstractOperator):
 

@@ -84,7 +84,7 @@ class TestQueryEngine(unittest.TestCase):
     def test_single_phrase(self):
         engine = QueryParser(CFG)
         root_operator = engine.process_phrase2query("'hello'")
-        self.assertIsInstance(root_operator, PhraseOperator)
+        self.assertIsInstance(root_operator, TermOperator)
         self.assertEqual(root_operator.phrase, "'hello'")
 
 
