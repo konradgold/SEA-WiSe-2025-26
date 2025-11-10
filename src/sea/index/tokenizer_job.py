@@ -1,4 +1,3 @@
-from re import L
 from dotenv import load_dotenv
 import os
 import json
@@ -29,7 +28,7 @@ def _tokenize_doc(payload):
     return key, tok.tokenize(body)
 
 def iter_doc_keys(db, scan_count):
-    for redis_key in db.scan_iter(match="D", count=scan_count):
+    for redis_key in db.scan_iter(match="D*", count=scan_count):
         if not isinstance(redis_key, str):
             try:
                 decoded_key = redis_key.decode()

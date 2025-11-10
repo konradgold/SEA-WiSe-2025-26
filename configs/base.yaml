@@ -41,7 +41,7 @@ QUERY:
   MAX_PHRASE_LEN: 5
 
 STORAGE:
-  TYPE: "filesystem" # options: "redis", "memory"
+  TYPE: "filesystem" # options: "redis"
   CURSOR_SIZE: 10
   PATH_DOCS: "data/storage_docs.json"
   PATH_TOKENS: "data/storage_tokens.json"

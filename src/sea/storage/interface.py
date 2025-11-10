@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 import json
-from typing import Any, Generator
+from typing import Any, Generator, Optional
 from sea.utils.manage_redis import connect_to_db
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -12,6 +11,7 @@ class StorageInterface(ABC):
     def __init__(self, cfg):
         self.cfg = cfg
 
+    @abstractmethod
     def set(self, key, value):
         pass
 
@@ -111,7 +111,8 @@ class RedisStorage(StorageInterface):
         return self.storage.scan(cursor)
 
     def execute(self) -> list:
-        return []
+        logger.warning("RedisStorage.execute() called directly; this may not behave as expected.")
+        return [0]
 
     def set(self, key, value):
         return self.storage.set(key, value)
@@ -184,6 +185,8 @@ class LocalStorage(StorageInterface):
         keys = list(self._storage.keys())[self.iterated:]
         for key in keys:
             self.iterated += 1
+            if match and match.endswith('*'):
+                match = match[:-1]
             if match is None or key.startswith(match):
                 yield key
                 yielded += 1
@@ -206,9 +209,9 @@ class LocalStorage(StorageInterface):
     def ping(self):
         return True
 
-    def scan(self, cursor, count=None):
+    def scan(self, cursor, count: Optional[int] = 10):
         if count is None:
-            count = self.cfg.STORAGE.CURSOR_SIZE if self.cfg.STORAGE.CURSOR_SIZE else 10
+            count = self.cfg.STORAGE.CURSOR_SIZE
         keys = list(self._storage.keys())
         if cursor >= len(keys):
             return 0, []
@@ -228,4 +231,4 @@ def get_storage(cfg):
         logger.info("Using local filesystem storage backend.")
         return LocalStorage(cfg)
     else:
-        raise ValueError("Unknown storage type")
+        raise ValueError(f"Unknown storage type: {cfg.STORAGE.TYPE}")
