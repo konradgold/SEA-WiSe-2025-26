@@ -5,9 +5,9 @@ import logging
 import multiprocessing as mp
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
+from sea.storage.interface import LocalStorage, get_storage
 from sea.utils.config import Config
 from collections import Counter
-from sea.utils.manage_redis import connect_to_db
 
 
 logging.basicConfig(level=logging.INFO)
@@ -112,7 +112,7 @@ def update_documents_with_tokens(db, docs, tokenized, pipe):
 def write_postings(postings_by_token, pipe):
     for tok, mapping in postings_by_token.items():
         token_key = f"token:{tok}"
-        pipe.hset(token_key, mapping=mapping)
+        pipe.hset(token_key, mapping)
 
 
 def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
@@ -139,7 +139,7 @@ def main():
       cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
       
 
-    db = connect_to_db(cfg)
+    db = get_storage(cfg)
     pipe = db.pipeline()
     num_docs_processed = 0
     local_tokenizer = get_tokenizer(cfg)
@@ -148,7 +148,7 @@ def main():
         if cfg.TOKENIZER.NUM_WORKERS > 1
         else None
     )
-    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} workers")
+    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} worker{'s' if cfg.TOKENIZER.NUM_WORKERS != 1 else ''}")
 
     batch_keys = []
     for doc_key in iter_doc_keys(db, cfg.TOKENIZER.SCAN_COUNT):
@@ -166,6 +166,9 @@ def main():
     if pool:
         pool.close()
         pool.join()
+    
+    if isinstance(db, LocalStorage):
+        db.save()
 
     print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
     return None, num_docs_processed

@@ -29,8 +29,6 @@ class Config(object):
                 self.cfg_file = path
 
             self.cfg_file = self._resolve_cfg_path(self.cfg_file)
-
-            print("Loading config from {}.".format(self.cfg_file))
             self.need_initialization = True
             cfg_base = self._initialize_cfg()
             cfg_dict = self._load_yaml(self.cfg_file)

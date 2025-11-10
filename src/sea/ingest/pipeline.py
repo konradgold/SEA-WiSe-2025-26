@@ -4,8 +4,8 @@ from typing import Any
 import redis
 from sea.perf.simple_perf import perf_indicator
 import logging
+from sea.storage.interface import get_storage
 from sea.utils.config import Config
-from sea.utils.manage_redis import connect_to_db
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -104,8 +104,9 @@ class Ingestion:
 def main():
     cfg = Config(load=True)
 
-
-    db = connect_to_db(cfg)
+    cfg.STORAGE.LOAD_DOCUMENTS = True
+    cfg.STORAGE.KEEP_DOCUMENTS = True # otherwise this makes no sense
+    db = get_storage(cfg)
     ingestion = Ingestion(db, [MinimalProcessor()], cfg.DOCUMENTS)
     ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
     db.close()

@@ -8,9 +8,9 @@ TOKENIZER:
   NUMBER_NORMALIZE: true
   SPACY_MODEL: "blank"
   SPACY_DISABLE: null
-  NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
-  SCAN_COUNT: 1000
-  FLUSH_EVERY: 50
+  NUM_WORKERS: 1 # set to 0 to use os.cpu_count()
+  SCAN_COUNT: 100000
+  FLUSH_EVERY: 1000
   STORE_POSITIONS: true
   STORE_TOKENS: false
 
@@ -26,8 +26,8 @@ SEARCH:
   MAX_RESULTS: 10
 
 INGESTION:
-  NUM_DOCUMENTS: 300
-  BATCH_SIZE: 100
+  NUM_DOCUMENTS: 100000
+  BATCH_SIZE: 10000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"
@@ -39,4 +39,12 @@ PERF_RUNNER:
 
 QUERY:
   MAX_PHRASE_LEN: 5
+
+STORAGE:
+  TYPE: "filesystem" # options: "redis"
+  CURSOR_SIZE: 10
+  PATH_DOCS: "data/storage_docs.json"
+  PATH_TOKENS: "data/storage_tokens.json"
+  KEEP_DOCUMENTS: false
+  LOAD_DOCUMENTS: true
 
