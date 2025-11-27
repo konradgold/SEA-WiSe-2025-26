@@ -154,25 +154,16 @@ def doc_to_postings(doc: dict, tokenizer, store_positions: bool) -> dict[str, di
             value = json.dumps({"tf": int(tf)})
             result[tok] = {doc_id: value}
 
-    return result, doc_id, len(tokens)
+    return result, len(tokens)
 
-def build_index(metadata, docs: list[dict], tokenizer, store_positions: bool, pool):
+def build_index(metadata, docs: list[dict], tokenizer, store_positions: bool):
     postings_by_token: dict[str, dict[str, str]] = defaultdict(dict)
 
-    if pool and len(docs) > 1:
-        func = partial(doc_to_postings, tokenizer=tokenizer, store_positions=store_positions)
-        for part in pool.imap_unordered(func, docs, chunksize=64):
-            posting, doc_id, token_no = part
-            metadata[doc_id].append(token_no)
-            
-            for tok, mapping in posting.items():
-                postings_by_token[tok].update(mapping)
-    else:
-        for doc in docs:
-            part, doc_id, token_no = doc_to_postings(doc, tokenizer, store_positions)
-            metadata[doc_id].append(token_no)    
-            for tok, mapping in part.items():
-                postings_by_token[tok].update(mapping)
+    for doc in docs:
+        part, token_no = doc_to_postings(doc, tokenizer, store_positions)
+        metadata[doc["doc_id"]].append(token_no)    
+        for tok, mapping in part.items():
+            postings_by_token[tok].update(mapping)
 
     return dict(postings_by_token)
 
@@ -181,33 +172,11 @@ def build_index(metadata, docs: list[dict], tokenizer, store_positions: bool, po
 def process_batch_in_memory(metadata, docs : List[dict] = []) -> dict:
     if len(docs) == 0:
         return dict()
-
-
+    
     load_dotenv()
     cfg = Config(load=True)
-    if cfg.TOKENIZER.NUM_WORKERS == 0:
-      cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
-      
     local_tokenizer = get_tokenizer(cfg)
-    pool = (
-        mp.Pool(processes=cfg.TOKENIZER.NUM_WORKERS, initializer=_init_worker)
-        if cfg.TOKENIZER.NUM_WORKERS > 1
-        else None
-    )
-    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} worker{'s' if cfg.TOKENIZER.NUM_WORKERS != 1 else ''}")
-
-
-    return build_index(metadata, docs, local_tokenizer, cfg.TOKENIZER.STORE_POSITIONS, pool)
-    # tokenized = tokenize_documents(docs, pool, local_tokenizer)
-    # postings_by_token = build_postings(tokenized, cfg.TOKENIZER.STORE_POSITIONS)
-
-    # if cfg.TOKENIZER.STORE_TOKENS:
-        # update_documents_with_tokens(None, docs, tokenized, pipe)
-
-    # write_postings(postings_by_token, pipe)
-    # pipe.execute()
-    # return len(tokenized)
-    return postings_by_token
+    return  build_index(metadata, docs, local_tokenizer, cfg.TOKENIZER.STORE_POSITIONS)
 
 
 @perf_indicator("tokenize_redis_content", "docs")

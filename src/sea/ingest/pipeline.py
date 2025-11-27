@@ -1,7 +1,14 @@
+import collections
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing as mp
 import enum
 import json
-from typing import Any
-import redis
+import os
+from types import SimpleNamespace
+from typing import Any, Iterator, List, Tuple
+
+import psutil
+from sea.index.tokenization import get_tokenizer
 from sea.index.tokenizer_job import process_batch_in_memory
 from sea.perf.simple_perf import perf_indicator
 import logging
@@ -43,70 +50,79 @@ class Ingestion:
         self.processors = processors
         self.document_path = document_path
 
+
+    def rss_mb(self, PROC):
+        return PROC.memory_info().rss / (1024**2)
+
     @perf_indicator("ingest", "docs")
     def ingest(self, num_documents: int = 1000, batch_size: int = 500):
         # pipeline = self.db.pipeline()
-        inserted_keys: list[str] = []
-        keys_in_batch: list[str] = []
-        remaining = num_documents
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
-        total_inserted = 0
-        total_visited = 0
 
-        docs_metadata = dict()
-        current_doc_no = 0
 
-        batch = []
+        MAX_MB = 1024
+        PROC = psutil.Process(os.getpid())
+        block_count = 0
+
+        metadata = dict()
+        merged: dict[str, dict[str, str]] = {}
+
+        cfg = Config(load=True)
+        if cfg.TOKENIZER.NUM_WORKERS == 0:
+            cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
+        print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} worker{'s' if cfg.TOKENIZER.NUM_WORKERS != 1 else ''}")
 
         print(f"Starting ingestion of {num_documents} documents from {self.document_path}...")
         with open(self.document_path, "r") as f:
-            print("Opened document file.")
-            batch_count = 0
-            for index, line in enumerate(f):
-                
-                if remaining <= 0:
-                    break
-                doc = line.strip().split("\t")
-                if len(doc) != 4:
-                    continue
+            ex = ProcessPoolExecutor(
+                max_workers=cfg.TOKENIZER.NUM_WORKERS,
+                mp_context=mp.get_context("spawn"))
 
-                docs_metadata[current_doc_no] = [doc[0], index] 
-                doc[0] = current_doc_no
-                doc_id = doc[0]
+            ex._processes  # touch to allocate
+            ex.submit(lambda: None)  # noop to ensure pool up
+            # index = 0
+            index = SimpleNamespace(value = 0)
+            while index.value < num_documents:
+                futures = []
+                for i, lines in enumerate(self._chunked_lines(f, batch_size, index)):
+                    # if i * batch_size >= num_documents:
+                        # break
+                    futures.append(ex.submit(self._process_batch, lines))
 
-
-                doc_id = doc[0]
-                for processor in self.processors:
-                    doc_id, doc = processor.process(doc_id, doc)
-                # pipeline.setnx(doc_id, doc)
-                doc = json.loads(doc)
-                # print(doc["body"])
-
-                batch.append(doc)
-
-                current_doc_no += 1
-                remaining -= 1
-                batch_count += 1
-
-                if batch_count >= batch_size or remaining < 0:
-                    # for multiprocessing in windows, we need to protect the entry point
-                    if __name__ == "__main__":
-                        index  = process_batch_in_memory(docs_metadata, batch)
-
-                    print(docs_metadata)
-                    batch = []
-                    batch_count = 0
-
-                    if remaining < 0:
+                    if len(futures) == cfg.TOKENIZER.NUM_WORKERS:
                         break
 
+                print(f"Docs {index.value} / {num_documents} submitted for processing.")
 
-  
-  
+                for fut in as_completed(futures):
+                    print(f"Doc batch processed.")
+                    part_metadata, part = fut.result()
+                    metadata.update(part_metadata)
+                    self._merge(merged, part)
 
+                print(f"Current RSS memory usage: {self.rss_mb(PROC):.2f} | {MAX_MB} MB")
+                if index.value >= 10_000 or self.rss_mb(PROC) > MAX_MB:
+                    print(f"Writing block {block_count} to disk, with {len(merged)} tokens and {len(metadata)} documents")
 
+                    os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
+                    order_merged =  collections.OrderedDict(sorted(merged.items()))
+                    with open(cfg.BLOCK_PATH + f"tokenizer_output_{block_count}.txt", "w") as block: 
+                        for item in order_merged.items():
+                            block.write(json.dumps(item) + "\n")
 
+                    block_count += 1
+                    merged.clear()
+            
+            if merged:
+                print(f"Writing final block {block_count} to disk, with {len(merged)} tokens and {len(metadata)} documents")
+
+                os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
+                order_merged =  collections.OrderedDict(sorted(merged.items()))
+                with open(cfg.BLOCK_PATH + f"tokenizer_output_{block_count}.txt", "w") as block: 
+                    for item in order_merged.items():
+                        block.write(json.dumps(item) + "\n")
+    
         #         keys_in_batch.append(doc_id)
         #         batch_count += 1
         #         total_visited += 1
@@ -131,8 +147,51 @@ class Ingestion:
 
         # logger.info(f"There are now {self.db.dbsize()} documents in the database.")
         # Return (payload, count) for perf_indicator
-        return inserted_keys, total_inserted
+        # return inserted_keys, total_inserted
+
+    def _merge(self, a: dict, b: dict) -> None:
+        # in-place merge: {tok: {doc: val}}
+        for tok, mapping in b.items():
+            a.setdefault(tok, {}).update(mapping)
+
+    def _chunked_lines(self,f , batch_size: int,  counter :  SimpleNamespace) -> Iterator[List[Tuple[int, str]]]:
+        buf = []
+        for line in f:
+            buf.append([counter.value , line])
+            counter.value += 1
+
+            if len(buf) >= batch_size:
+                yield buf
+                buf = []
+        if buf:
+            yield buf
+
     
+    def _process_batch(self, lines: List[Tuple[int, str]]) -> dict[str, dict[str, str]]:
+        batch = []
+        metadata = dict()
+
+        for line in lines:
+            index = line[0]
+            data = line[1]
+            doc = data.strip().split("\t")
+            if len(doc) != 4:
+                continue
+
+            metadata[index] = [doc[0]] 
+            doc[0] = index
+            doc_id = doc[0]
+
+            doc_id = doc[0]
+            for processor in self.processors:
+                doc_id, doc = processor.process(doc_id, doc)
+            doc = json.loads(doc)
+
+            batch.append(doc)
+
+        index  = process_batch_in_memory(metadata, batch)
+        return metadata, index
+
     def _execute_pipe(self, pipeline, keys_in_batch, inserted_keys, total_inserted):
         results = pipeline.execute()
         # Track which keys were newly inserted
@@ -142,7 +201,6 @@ class Ingestion:
         ingested_now = sum(results)
         total_inserted += ingested_now
         return total_inserted
-
 
 def main():
     cfg = Config(load=True)
