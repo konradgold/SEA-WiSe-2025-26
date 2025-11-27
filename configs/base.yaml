@@ -11,7 +11,7 @@ TOKENIZER:
   NUM_WORKERS: 1 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 100000
   FLUSH_EVERY: 1000
-  STORE_POSITIONS: true
+  STORE_POSITIONS: false
   STORE_TOKENS: false
 
 REDIS_HOST: "localhost"
@@ -26,8 +26,8 @@ SEARCH:
   MAX_RESULTS: 10
 
 INGESTION:
-  NUM_DOCUMENTS: 100000
-  BATCH_SIZE: 10000
+  NUM_DOCUMENTS: 10000
+  BATCH_SIZE: 1000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"
@@ -41,10 +41,18 @@ QUERY:
   MAX_PHRASE_LEN: 5
 
 STORAGE:
-  TYPE: "filesystem" # options: "redis"
+  TYPE: "disk"  # options: "redis", "filesystem", "disk"
   CURSOR_SIZE: 10
   PATH_DOCS: "data/storage_docs.json"
   PATH_TOKENS: "data/storage_tokens.json"
   KEEP_DOCUMENTS: false
   LOAD_DOCUMENTS: true
+
+# Disk-based index settings (for TYPE: "disk")
+DISK_INDEX:
+  PATH: "index/"  # Directory where index files are stored
+  MEMORY_LIMIT_MB: 900  # Max RAM during indexing (stay under ~950MB to leave headroom)
+  DOC_LIMIT: 10000  # Set to a number to limit docs, null for all
+  NUM_WORKERS: null  # null = use all CPU cores  
+  BATCH_SIZE: 5000  # Docs per batch for parallel tokenization (larger = more efficient)
 

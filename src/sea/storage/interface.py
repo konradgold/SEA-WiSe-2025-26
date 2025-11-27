@@ -75,38 +75,38 @@ class RedisStorage(StorageInterface):
 
     def hgetall(self, key):
         return self.storage.hgetall(key)
-    
+
     def hset(self, key, value):
         return self.storage.hset(key, mapping=value)
-    
+
     def get(self, key):
         return self.storage.get(key)
-    
+
     def setnx(self, key, value):
         return self.storage.setnx(key, value)
-    
+
     def delete(self, key):
         return self.storage.delete(key)
-    
+
     def dbsize(self):
         return self.storage.dbsize()
-    
+
     def scan_iter(self, match=None, count=None):
         for item in self.storage.scan_iter(match=match, count=count):
             yield item
-    
+
     def mget(self, keys):
         return self.storage.mget(keys)
-    
+
     def pipeline(self):
         return self.storage.pipeline()
-    
+
     def close(self):
         return self.storage.close()
-    
+
     def ping(self):
         return self.storage.ping()
-    
+
     def scan(self, cursor):
         return self.storage.scan(cursor)
 
@@ -116,7 +116,7 @@ class RedisStorage(StorageInterface):
 
     def set(self, key, value):
         return self.storage.set(key, value)
-    
+
 
 class LocalStorage(StorageInterface):
     def __init__(self, cfg):
@@ -230,5 +230,12 @@ def get_storage(cfg):
     elif cfg.STORAGE.TYPE == "filesystem":
         logger.info("Using local filesystem storage backend.")
         return LocalStorage(cfg)
+    elif cfg.STORAGE.TYPE == "disk":
+        from sea.index.disk_index import DiskIndex
+
+        logger.info("Using disk-based index backend.")
+        index = DiskIndex(cfg)
+        index.open()
+        return index
     else:
         raise ValueError(f"Unknown storage type: {cfg.STORAGE.TYPE}")

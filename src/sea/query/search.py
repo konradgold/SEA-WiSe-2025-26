@@ -10,15 +10,27 @@ from sea.utils.config import Config
 import time
 
 
-
 @perf_indicator("search", "queries")
-def search_documents(redis_client, query, max_output_result=10):
-    # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
+def search_documents(redis_client, query, max_output_result=10, include_body=False):
+    """
+    Search for documents matching the query.
+
+    Args:
+        redis_client: Storage backend (LocalStorage, DiskIndex, etc.)
+        query: Search query string
+        max_output_result: Maximum number of results to return
+        include_body: If True, include full document body in results
+
+    Returns:
+        (results, num_matches) where results is a list of tuples:
+        - Without body: (doc_id, title, url)
+        - With body: (doc_id, title, url, body)
+    """
     query_parser = QueryParser(cfg=Config())
     root_operator = query_parser.process_phrase2query(query)
     matches = root_operator.execute(redis_client, get_tokenizer())
     if not matches:
-        return []
+        return [], 0
     num_matches = len(matches)
     out_matches = []
     for i, match in enumerate(matches):
@@ -27,8 +39,21 @@ def search_documents(redis_client, query, max_output_result=10):
         doc_content = redis_client.get(match)
         if doc_content:
             doc_json = json.loads(doc_content)
-            out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
+            if include_body:
+                out_matches.append(
+                    (
+                        match,
+                        doc_json.get("title", ""),
+                        doc_json.get("link", ""),
+                        doc_json.get("body", ""),
+                    )
+                )
+            else:
+                out_matches.append(
+                    (match, doc_json.get("title", ""), doc_json.get("link", ""))
+                )
     return out_matches, num_matches
+
 
 def main():
     cfg = Config(load=True)
