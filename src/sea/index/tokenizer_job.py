@@ -1,3 +1,5 @@
+from functools import partial
+from typing import List
 from dotenv import load_dotenv
 import os
 import json
@@ -7,7 +9,7 @@ from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
 from sea.storage.interface import LocalStorage, get_storage
 from sea.utils.config import Config
-from collections import Counter
+from collections import Counter, defaultdict
 
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +62,7 @@ def tokenize_documents(docs, pool, local_tokenizer):
     if pool and len(docs) > 1:
         return pool.map(_tokenize_doc, docs)
     return [
-        (doc_key, local_tokenizer.tokenize(body_text)) for doc_key, body_text in docs
+        (doc["doc_id"], local_tokenizer.tokenize(doc["title"] + " " + doc["body"])) for doc in docs
     ]
 
 
@@ -129,6 +131,83 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
     write_postings(postings_by_token, pipe)
     pipe.execute()
     return len(tokenized)
+
+
+def doc_to_postings(doc: dict, tokenizer, store_positions: bool) -> dict[str, dict[str, str]]:
+    """
+    Returns postings for ONE doc:
+      { token: { doc_id: json_value } }
+    """
+    doc_id = doc["doc_id"]
+    tokens = tokenizer.tokenize(f'{doc.get("title","")} {doc.get("body","")}')
+    result: dict[str, dict[str, str]] = {}
+
+    if store_positions:
+        pos_by_tok: dict[str, list[int]] = defaultdict(list)
+        for idx, tok in enumerate(tokens):
+            pos_by_tok[tok].append(idx)
+        for tok, positions in pos_by_tok.items():
+            value = json.dumps({"tf": len(positions), "pos": positions})
+            result[tok] = {doc_id: value}
+    else:
+        for tok, tf in Counter(tokens).items():
+            value = json.dumps({"tf": int(tf)})
+            result[tok] = {doc_id: value}
+
+    return result, doc_id, len(tokens)
+
+def build_index(metadata, docs: list[dict], tokenizer, store_positions: bool, pool):
+    postings_by_token: dict[str, dict[str, str]] = defaultdict(dict)
+
+    if pool and len(docs) > 1:
+        func = partial(doc_to_postings, tokenizer=tokenizer, store_positions=store_positions)
+        for part in pool.imap_unordered(func, docs, chunksize=64):
+            posting, doc_id, token_no = part
+            metadata[doc_id].append(token_no)
+            
+            for tok, mapping in posting.items():
+                postings_by_token[tok].update(mapping)
+    else:
+        for doc in docs:
+            part, doc_id, token_no = doc_to_postings(doc, tokenizer, store_positions)
+            metadata[doc_id].append(token_no)    
+            for tok, mapping in part.items():
+                postings_by_token[tok].update(mapping)
+
+    return dict(postings_by_token)
+
+
+
+def process_batch_in_memory(metadata, docs : List[dict] = []) -> dict:
+    if len(docs) == 0:
+        return dict()
+
+
+    load_dotenv()
+    cfg = Config(load=True)
+    if cfg.TOKENIZER.NUM_WORKERS == 0:
+      cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) // 2
+      
+    local_tokenizer = get_tokenizer(cfg)
+    pool = (
+        mp.Pool(processes=cfg.TOKENIZER.NUM_WORKERS, initializer=_init_worker)
+        if cfg.TOKENIZER.NUM_WORKERS > 1
+        else None
+    )
+    print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} worker{'s' if cfg.TOKENIZER.NUM_WORKERS != 1 else ''}")
+
+
+    return build_index(metadata, docs, local_tokenizer, cfg.TOKENIZER.STORE_POSITIONS, pool)
+    # tokenized = tokenize_documents(docs, pool, local_tokenizer)
+    # postings_by_token = build_postings(tokenized, cfg.TOKENIZER.STORE_POSITIONS)
+
+    # if cfg.TOKENIZER.STORE_TOKENS:
+        # update_documents_with_tokens(None, docs, tokenized, pipe)
+
+    # write_postings(postings_by_token, pipe)
+    # pipe.execute()
+    # return len(tokenized)
+    return postings_by_token
 
 
 @perf_indicator("tokenize_redis_content", "docs")
