@@ -1,6 +1,8 @@
 # sea/ingest/worker.py
 from __future__ import annotations
 from collections import defaultdict, Counter
+from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, List, Tuple, Dict
 import json
 import os
@@ -16,6 +18,20 @@ class Columns(enum.Enum):
     title  = "title"
     body   = "body"
 
+
+@dataclass
+class BatchTimings:
+    block_id: str
+    n_docs: int
+    build_index_s: float
+    write_disk_s: float
+    total_s: float
+
+@dataclass
+class BatchResult:
+    metadata: Dict[int, list[str]]
+    timings: BatchTimings 
+
 # ---- Per-process singleton (created by init_worker) ----
 _worker: "Worker | None" = None
 
@@ -27,12 +43,23 @@ class Worker:
     # public entry point used by the parent to process one batch
     def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> Dict[int, list[str]]:
         # build index and write shard on disk; return metadata for this batch
+        t0 = perf_counter()
         print(f"[{block_id}] start")
         metadata, index = self._create_batch_index(lines)
         print(f"[{block_id}] index built")
+        t1 = perf_counter()
         self._write_block_to_disk(block_id, index)
         print(f"[{block_id}] written to disk")
-        return metadata
+        t2 = perf_counter()
+
+        timings = BatchTimings(
+            block_id=block_id,
+            n_docs= len(lines),
+            build_index_s=t1 - t0,
+            write_disk_s=t2 - t1,
+            total_s=t2 - t0,
+        )
+        return BatchResult(metadata=metadata, timings=timings)
 
     # ------------- internals -------------
     def _write_block_to_disk(self, block_id: str, index: dict[str, dict[str, str]]) -> None:
@@ -69,7 +96,8 @@ class Worker:
 
     def _doc_to_postings(self, metadata: Dict[int, list[str]], doc: list[str]) -> dict[str, dict[str, str]]:
         doc_id = doc[0] # use the running index as doc_id
-        tokens = self.tokenizer.tokenize(f'{doc[2]} {doc[3]}')  # title + body
+        # tokens = self.tokenizer.tokenize(f'{doc[2]} {doc[3]}')  # title + body
+        tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
         result: dict[str, dict[str, str]] = {}
 
         if self.store_positions:
@@ -92,7 +120,8 @@ def init_worker():
     """
     global _worker
 
-    tok = get_tokenizer()  # whatever your get_tokenizer expects (dict/dataclass)
+    # tok = get_tokenizer()  # whatever your get_tokenizer expects (dict/dataclass)
+    tok = None # simple whitespace tokenizer
 
     store_positions = True
     _worker = Worker(store_positions=store_positions, tokenizer=tok)

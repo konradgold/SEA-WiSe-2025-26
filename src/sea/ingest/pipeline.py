@@ -5,10 +5,11 @@ import os
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Tuple
 
-from sea.ingest.worker import init_worker, process_batch
+from sea.ingest.worker import BatchResult, BatchTimings, init_worker, process_batch
 from sea.perf.simple_perf import perf_indicator
 import logging
 from sea.utils.config import Config
+from sea.utils.logger import write_message_to_log_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ class Ingestion:
 
         with open(self.document_path, "r") as f:
             batch_iter = self._chunked_lines(f, batch_size, counter)
+            timings = []
             iteration = 0
 
             with ProcessPoolExecutor(
@@ -78,12 +80,35 @@ class Ingestion:
                     print(f"Docs {counter.value} / {num_documents} submitted for processing.")
 
                     for fut in as_completed(futures):
-                        part_metadata = fut.result()
-                        metadata.update(part_metadata)
+                        batch_result = fut.result()
+                        timings.append(batch_result.timings)
+                        metadata.update(batch_result.metadata)                    
                     iteration += 1
+            self.summarize(timings)
             return [], counter.value
 
+    def summarize(self, batch_timings: List[BatchTimings]) -> None:
+        total_docs = sum(bt.n_docs for bt in batch_timings)
+        sum_build = sum(bt.build_index_s for bt in batch_timings)
+        sum_write = sum(bt.write_disk_s for bt in batch_timings)
+        sum_total = sum(bt.total_s for bt in batch_timings)
 
+        # Weighted by docs: (sum step_time) / (sum docs)
+        ms_per_doc_build = 1000.0 * (sum_build / total_docs) if total_docs else 0.0
+        ms_per_doc_write = 1000.0 * (sum_write / total_docs) if total_docs else 0.0
+        ms_per_doc_total = 1000.0 * (sum_total / total_docs) if total_docs else 0.0
+
+        # Throughput (docs/sec) across all workers
+        build_docs_per_s = total_docs / sum_build if sum_build else float("inf")
+        write_docs_per_s = total_docs / sum_write if sum_write else float("inf")
+        total_docs_per_s = total_docs / sum_total if sum_total else float("inf")
+        
+        time_measurement = (f"[AGG] docs={total_docs}  build={ms_per_doc_build:.2f} ms/doc "
+                f"({build_docs_per_s:.0f} doc/s)  write={ms_per_doc_write:.2f} ms/doc "
+                f"({write_docs_per_s:.0f} doc/s)  total={ms_per_doc_total:.2f} ms/doc "
+                f"({total_docs_per_s:.0f} doc/s)")
+        print(time_measurement)
+        write_message_to_log_file(time_measurement)
 
     def _merge(self, a: dict, b: dict) -> None:
         # in-place merge: {tok: {doc: val}}
