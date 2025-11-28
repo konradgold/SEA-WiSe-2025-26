@@ -209,5 +209,7 @@ __marimo__/
 
 msmarco-docs.*
 
+data/blocks/*
+
 # Mac OS
 .DS_Store
