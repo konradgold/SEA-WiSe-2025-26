@@ -1,5 +1,6 @@
 # sea/ingest/worker.py
 from __future__ import annotations
+import array
 from collections import defaultdict, Counter
 from dataclasses import dataclass
 from time import perf_counter
@@ -62,7 +63,7 @@ class Worker:
         return BatchResult(metadata=metadata, timings=timings)
 
     # ------------- internals -------------
-    def _write_block_to_disk(self, block_id: str, index: dict[str, List[int]]) -> None:
+    def _write_block_to_disk(self, block_id: str, index: dict[str, array.array[int]]) -> None:
         cfg = Config(load=True)
         os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
         ordered = collections.OrderedDict(sorted(index.items()))
@@ -86,34 +87,33 @@ class Worker:
         index = self._build_index(metadata, batch)
         return metadata, index
 
-    def _build_index(self, metadata: Dict[int, list[str]], docs: list[list[str]]) -> dict[str, List[int]]:
-        postings_by_token: dict[str, List[int]] = defaultdict(list)
+    def _build_index(self, metadata: Dict[int, list[str]], docs: list[list[str]]) -> dict[str, array.array[int]]:
+        index: dict[str, array.array[int]] = defaultdict(list)
         for doc in docs:
-            part = self._doc_to_postings(metadata, doc)
-            for tok, mapping in part.items():
-                postings_by_token[tok] = postings_by_token[tok] + mapping
-        return dict(postings_by_token)
+            self._doc_to_postings(index, metadata, doc)
+        return dict(index)
 
-    def _doc_to_postings(self, metadata: Dict[int, list[str]], doc: list[str]) -> dict[str, List[int]]:
+    def _doc_to_postings(self,index : dict[str, List[int]],  metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
         # tokens = self.tokenizer.tokenize(f'{doc[2]} {doc[3]}')  # title + body
         tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
-        result: dict[str, dict[str, str]] = {}
 
         if self.store_positions:
-            pos_by_tok: dict[str, list[int]] = defaultdict(list)
+            pos_by_tok: dict[str, array.array[int]] = {}
             for i, tok in enumerate(tokens):
+                if tok not in pos_by_tok:
+                    pos_by_tok[tok] = array.array('I')  # unsigned int
                 pos_by_tok[tok].append(i)
             for tok, pos in pos_by_tok.items():
-                # result[tok] = {doc_id: json.dumps({"tf": len(pos), "pos": pos})}
-                result[tok] = [doc_id, len(pos)] + pos
+                index[tok].append(doc_id)
+                index[tok].append(len(pos))
+                index[tok].extend(pos)
         else:
             for tok, tf in Counter(tokens).items():
-                # result[tok] = {doc_id: json.dumps({"tf": int(tf
-                result[tok] = [doc_id, int(tf)]
+                index[tok].append(doc_id)
+                index[tok].append(len(tf))
 
         metadata[doc_id].append(len(tokens))
-        return result
 
 # --------- top-level functions required by ProcessPoolExecutor ---------
 def init_worker():
