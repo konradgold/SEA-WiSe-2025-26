@@ -2,6 +2,7 @@ import collections
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 import os
+from time import perf_counter
 from types import SimpleNamespace
 from typing import Any, Iterator, List, Tuple
 
@@ -9,7 +10,7 @@ from sea.ingest.worker import BatchResult, BatchTimings, init_worker, process_ba
 from sea.perf.simple_perf import perf_indicator
 import logging
 from sea.utils.config import Config
-from sea.utils.logger import write_message_to_log_file
+from sea.utils.logger import dir_size, write_message_to_log_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ class Ingestion:
         # print(f"[tokenize_redis_content] Using {cfg.TOKENIZER.NUM_WORKERS} worker{'s' if cfg.TOKENIZER.NUM_WORKERS != 1 else ''}")
 
         print(f"Starting ingestion of {num_documents} documents from {self.document_path}...")
-
+        start = perf_counter()
 
         with open(self.document_path, "r") as f:
             batch_iter = self._chunked_lines(f, batch_size, counter)
@@ -84,29 +85,34 @@ class Ingestion:
                         timings.append(batch_result.timings)
                         metadata.update(batch_result.metadata)                    
                     iteration += 1
-            self.summarize(timings)
+            end = perf_counter()
+            self.summarize(end - start,max_workers ,timings)
             return [], counter.value
 
-    def summarize(self, batch_timings: List[BatchTimings]) -> None:
+    def summarize(self, total_time, num_of_workers, batch_timings: List[BatchTimings]) -> None:
         total_docs = sum(bt.n_docs for bt in batch_timings)
-        sum_build = sum(bt.build_index_s for bt in batch_timings)
-        sum_write = sum(bt.write_disk_s for bt in batch_timings)
-        sum_total = sum(bt.total_s for bt in batch_timings)
+        sum_build = sum(bt.build_index_s for bt in batch_timings) / num_of_workers
+        sum_write = sum(bt.write_disk_s for bt in batch_timings) / num_of_workers
 
         # Weighted by docs: (sum step_time) / (sum docs)
-        ms_per_doc_build = 1000.0 * (sum_build / total_docs) if total_docs else 0.0
-        ms_per_doc_write = 1000.0 * (sum_write / total_docs) if total_docs else 0.0
-        ms_per_doc_total = 1000.0 * (sum_total / total_docs) if total_docs else 0.0
+        ms_per_doc_build = 1000.0 * (sum_build / total_docs) 
+        ms_per_doc_write = 1000.0 * (sum_write / total_docs) 
+        ms_per_doc_total = 1000.0 * (total_time / total_docs)
 
         # Throughput (docs/sec) across all workers
-        build_docs_per_s = total_docs / sum_build if sum_build else float("inf")
-        write_docs_per_s = total_docs / sum_write if sum_write else float("inf")
-        total_docs_per_s = total_docs / sum_total if sum_total else float("inf")
+        build_docs_per_s = total_docs / sum_build 
+        write_docs_per_s = total_docs / sum_write
+        total_docs_per_s = total_docs / total_time
         
-        time_measurement = (f"[AGG] docs={total_docs}  build={ms_per_doc_build:.2f} ms/doc "
-                f"({build_docs_per_s:.0f} doc/s)  write={ms_per_doc_write:.2f} ms/doc "
-                f"({write_docs_per_s:.0f} doc/s)  total={ms_per_doc_total:.2f} ms/doc "
-                f"({total_docs_per_s:.0f} doc/s)")
+        # Measure disk usage at cfg.BLOCK_PATH
+        cfg= Config(load=True)
+        total_bytes_ = dir_size(cfg.BLOCK_PATH)
+
+        time_measurement = (f"[AGG] workers={num_of_workers} docs={total_docs} time={total_time:.0f}s \n"
+                f"build={ms_per_doc_build:.2f} ms/doc ({build_docs_per_s:.0f} doc/s) "  
+                f"write={ms_per_doc_write:.2f} ms/doc ({write_docs_per_s:.0f} doc/s) "
+                f"total={ms_per_doc_total:.2f} ms/doc ({total_docs_per_s:.0f} doc/s) "
+                f"total={total_bytes_/1_048_576:.2f} MiB ({(total_bytes_/total_docs)/1_024:.2f} KiB/doc)")
         print(time_measurement)
         write_message_to_log_file(time_measurement)
 
