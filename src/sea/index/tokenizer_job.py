@@ -133,52 +133,6 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
     return len(tokenized)
 
 
-def doc_to_postings(doc: dict, tokenizer, store_positions: bool) -> dict[str, dict[str, str]]:
-    """
-    Returns postings for ONE doc:
-      { token: { doc_id: json_value } }
-    """
-    doc_id = doc["doc_id"]
-    tokens = tokenizer.tokenize(f'{doc.get("title","")} {doc.get("body","")}')
-    result: dict[str, dict[str, str]] = {}
-
-    if store_positions:
-        pos_by_tok: dict[str, list[int]] = defaultdict(list)
-        for idx, tok in enumerate(tokens):
-            pos_by_tok[tok].append(idx)
-        for tok, positions in pos_by_tok.items():
-            value = json.dumps({"tf": len(positions), "pos": positions})
-            result[tok] = {doc_id: value}
-    else:
-        for tok, tf in Counter(tokens).items():
-            value = json.dumps({"tf": int(tf)})
-            result[tok] = {doc_id: value}
-
-    return result, len(tokens)
-
-def build_index(metadata, docs: list[dict], tokenizer, store_positions: bool):
-    postings_by_token: dict[str, dict[str, str]] = defaultdict(dict)
-
-    for doc in docs:
-        part, token_no = doc_to_postings(doc, tokenizer, store_positions)
-        metadata[doc["doc_id"]].append(token_no)    
-        for tok, mapping in part.items():
-            postings_by_token[tok].update(mapping)
-
-    return dict(postings_by_token)
-
-
-
-def process_batch_in_memory(metadata, docs : List[dict] = []) -> dict:
-    if len(docs) == 0:
-        return dict()
-    
-    load_dotenv()
-    cfg = Config(load=True)
-    local_tokenizer = get_tokenizer(cfg)
-    return  build_index(metadata, docs, local_tokenizer, cfg.TOKENIZER.STORE_POSITIONS)
-
-
 @perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
