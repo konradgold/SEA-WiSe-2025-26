@@ -2,10 +2,10 @@ TOKENIZER:
   MIN_LEN: 2
   BACKEND: "simple"  # options: "simple", "spacy"
   LOWERCASE: true
-  ASCII_FOLD: true
+  ASCII_FOLD: false
   REMOVE_STOPWORDS: true
   STEM: false
-  NUMBER_NORMALIZE: true
+  NUMBER_NORMALIZE: false
   SPACY_MODEL: "blank"
   SPACY_DISABLE: null
   NUM_WORKERS: 1 # set to 0 to use os.cpu_count()
