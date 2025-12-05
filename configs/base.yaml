@@ -48,3 +48,9 @@ STORAGE:
   KEEP_DOCUMENTS: false
   LOAD_DOCUMENTS: true
 
+SPLADE:
+  MODEL_ID: "naver/splade-cocondenser-ensembledistil"
+  DEVICE: "cuda:0"  # options: "cpu", "cuda:0", etc.
+  THRESHOLD: 0.01
+  CACHE_DIR: "cache/splade"
+  CAP_EXPANSION: 10
