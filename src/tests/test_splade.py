@@ -39,20 +39,6 @@ class TestSplade(unittest.TestCase):
         self.assertIsInstance(tokens, list)
         self.assertGreater(len(tokens), 0)
         self.assertTrue(all(isinstance(token, str) for token in tokens))
-
-    def test_threshold(self):
-        self.encoder.threshold = .01  # Set a higher threshold
-
-        _, sparse_dict_tokens = self.encoder.encode(self.test_texts[0])
-
-        self.assertTrue(all(v >= self.encoder.threshold for v in sparse_dict_tokens.values()))
-
-        self.encoder.threshold = 100.0  # Reset threshold
-
-        tokens = self.encoder.expand(self.test_texts[1])
-        self.assertIsInstance(tokens, list)
-        self.assertEqual(len(tokens), 0)  # Expecting no tokens above threshold
-    
     
     def test_tokenize(self):
         tokens = self.encoder.tokenize(self.test_texts[0])

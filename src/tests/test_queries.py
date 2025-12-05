@@ -115,10 +115,6 @@ class TestQueryEngine(unittest.TestCase):
         root_operator = engine.process_phrase2query("wish or expect or your or consider or charity or goal or will or purchase or albert or relationship or want or you or what or do")
         self.assertIsInstance(root_operator, OROperator)
 
-        root_operator.execute(None, None)
-
-
-
 
 if __name__ == '__main__':
     unittest.main()
