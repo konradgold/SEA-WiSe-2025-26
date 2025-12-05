@@ -3,6 +3,7 @@ from __future__ import annotations
 import array
 from collections import defaultdict, Counter
 from dataclasses import dataclass
+import struct
 from time import perf_counter
 from typing import Any, List, Tuple, Dict
 import json
@@ -63,14 +64,28 @@ class Worker:
         return BatchResult(metadata=metadata, timings=timings)
 
     # ------------- internals -------------
-    def _write_block_to_disk(self, block_id: str, index: dict[str, array.array[int]]) -> None:
+
+    def _write_block_to_disk(self, block_id: str, index: Dict[str, array.array[int]]) -> None:
         cfg = Config(load=True)
         os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
+
+        path = os.path.join(cfg.BLOCK_PATH, f"tokenizer_output_{block_id}.bin")
         ordered = collections.OrderedDict(sorted(index.items()))
-        with open(os.path.join(cfg.BLOCK_PATH, f"tokenizer_output_{block_id}.txt"), "w", encoding="utf-8") as out:
-            for item in ordered.items():
-                out.write(json.dumps(item) + "\n")
-                
+
+        with open(path, "wb") as out:
+            out.write(b"SEAB\x01")  # magic + version 1
+            for term, arr in ordered.items():
+                # ensure uint32 array
+                if arr.typecode != "I":
+                    arr = array("I", arr)
+
+                tb = term.encode("utf-8")
+                out.write(struct.pack("<I", len(tb)))
+                out.write(tb)
+
+                out.write(struct.pack("<I", len(arr)))
+                out.write(arr.tobytes())
+
     def _create_batch_index(self, lines: List[Tuple[int, str]]):
         batch: list[List[str]] = []
         metadata: Dict[int, list[str]] = {}
@@ -88,12 +103,12 @@ class Worker:
         return metadata, index
 
     def _build_index(self, metadata: Dict[int, list[str]], docs: list[list[str]]) -> dict[str, array.array[int]]:
-        index: dict[str, array.array[int]] = defaultdict(list)
+        index: dict[str, array.array[int]] = {}
         for doc in docs:
             self._doc_to_postings(index, metadata, doc)
-        return dict(index)
+        return index
 
-    def _doc_to_postings(self,index : dict[str, List[int]],  metadata: Dict[int, list[str]], doc: list[str]):
+    def _doc_to_postings(self,index : dict[str, array.array[int]],  metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
         # tokens = self.tokenizer.tokenize(f'{doc[2]} {doc[3]}')  # title + body
         tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
@@ -105,6 +120,8 @@ class Worker:
                     pos_by_tok[tok] = array.array('I')  # unsigned int
                 pos_by_tok[tok].append(i)
             for tok, pos in pos_by_tok.items():
+                if tok not in index:
+                    index[tok] = array.array('I')  # unsigned int
                 index[tok].append(doc_id)
                 index[tok].append(len(pos))
                 index[tok].extend(pos)
