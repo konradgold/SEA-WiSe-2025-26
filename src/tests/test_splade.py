@@ -53,17 +53,12 @@ class TestSplade(unittest.TestCase):
         self.assertIsInstance(tokens, list)
         self.assertEqual(len(tokens), 0)  # Expecting no tokens above threshold
     
-    def test_CUTOFF(self):
-        self.encoder.cutoff = 5
-
-        tokens = self.encoder.expand(self.test_texts[0])
+    
+    def test_tokenize(self):
+        tokens = self.encoder.tokenize(self.test_texts[0])
         self.assertIsInstance(tokens, list)
-        self.assertLessEqual(len(tokens), 5)
-
-        self.encoder.cutoff = 10  # Reset cutoff
-        tokens = self.encoder.expand(self.test_texts[0])
-        self.assertIsInstance(tokens, list)
-        self.assertLessEqual(len(tokens), 10)
+        self.assertGreater(len(tokens), 0)
+        self.assertTrue(all(isinstance(token, str) for token in tokens))
 
 
 

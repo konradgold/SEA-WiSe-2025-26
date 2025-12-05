@@ -151,7 +151,7 @@ class OROperator(AbstractOperator):
     def __init__(self, children: List[AbstractOperator]):
         self.children = children
 
-    def execute(self, r, tokenizer: Optional[TokenizerAbstract]=None) -> set:
+    def execute(self, r, tokenizer: Optional[TokenizerAbstract] = None) -> set:
         result = set()
         if tokenizer is None:
             tokenizer = get_tokenizer()

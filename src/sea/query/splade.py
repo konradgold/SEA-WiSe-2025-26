@@ -55,6 +55,9 @@ class SpladeEncoder:
         tokens = set(sparse_dict_tokens.keys())
         input_tokens = set(self.tokenizer.tokenize(text))
         tokens -= input_tokens
-
-        return list(tokens)[:self.cutoff] if self.cfg else list(tokens)
-
+        tokens = list(tokens)[:self.cutoff]
+        out = tokens + list(input_tokens)
+        return out
+    
+    def tokenize(self, text):
+        return list(self.tokenizer.tokenize(text))

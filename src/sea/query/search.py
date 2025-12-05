@@ -4,6 +4,7 @@ from prompt_toolkit.history import InMemoryHistory
 import sys
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
+from sea.query import splade
 from sea.query.parser import QueryParser
 from sea.storage.interface import get_storage
 from sea.utils.config import Config
@@ -37,6 +38,11 @@ def main():
     history = InMemoryHistory()
     session = PromptSession(history=history)
     max_output_result = cfg.SEARCH.MAX_RESULTS if cfg.SEARCH.MAX_RESULTS is not None else 10
+    splade_encoder = None
+    if cfg.SEARCH.EXPAND_QUERIES:
+        from sea.query.splade import SpladeEncoder
+        splade_encoder = SpladeEncoder(cfg=cfg)
+
 
     while True:
         
@@ -49,6 +55,14 @@ def main():
             break
         if not query:
             continue
+
+        if splade_encoder:
+            expansion_tokens = splade_encoder.expand(query)
+            if expansion_tokens:
+                print(f"Expanded query tokens: {expansion_tokens}")
+                query = " or ".join(expansion_tokens)
+                print(query)
+
         history.append_string(query)
         t0 = time.time()
         results, num_matches = search_documents(client, query, max_output_result)
