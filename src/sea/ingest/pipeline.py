@@ -3,11 +3,12 @@ import multiprocessing as mp
 import os
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Iterator, List, Tuple
+from typing import Dict, Iterator, List, Tuple
 
 from sea.ingest.kmerger import KMerger
 from sea.ingest.worker import  BatchTimings, init_worker, process_batch
 import logging
+from sea.storage.IO import DocDictonaryIO
 from sea.utils.config import Config
 from sea.utils.logger import dir_size, write_message_to_log_file
 
@@ -93,9 +94,14 @@ class Ingestion:
                     new_fut = submit_next(ex)
                     if new_fut is not None:
                         pending.add(new_fut)      
-                            
+                self._write_metadata_to_disk(metadata)
             return max_workers, timings
     
+    def _write_metadata_to_disk(self, metadata: Dict[int, list[str]]):
+        doc_dict_io = DocDictonaryIO(rewrite=True)
+        doc_dict_io.write_metadata(metadata)
+        doc_dict_io.close()
+
     def _clear_existing_blocks(self):
         cfg = Config(load=True)
         if os.path.exists(cfg.BLOCK_PATH):

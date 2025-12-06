@@ -3,7 +3,8 @@ import heapq
 import os
 from time import perf_counter
 from typing import Iterable, List, Tuple
-from sea.storage.IO import BlockIO, IndexIO
+from sea.storage.IO import BlockIO
+from sea.storage.manager import StorageManager
 
 
 class KMerger():
@@ -14,7 +15,7 @@ class KMerger():
     def __init__(self, block_path: str):
         self.block_path = block_path
         self.blockIO = BlockIO()
-        self.indexIO = IndexIO(rewrite=True)
+        self.storageManager = StorageManager(rewrite=True)
 
     def merge_blocks(self):
         start = perf_counter()
@@ -26,11 +27,11 @@ class KMerger():
             terms_merged = 0
 
             for term, posting_list in self._merge_sorted_files(file_paths):
-                self.indexIO.write_line(term, posting_list)
+                self.storageManager.write_term_posting_list(term, posting_list)
                 terms_merged += 1
                 if terms_merged % 100000 == 0:
                     print(f"Merged {terms_merged:,} terms...")
-            self.indexIO.close()
+            self.storageManager.close()
         else:
             print(f"No blocks found in {self.block_path} to merge.")
         end = perf_counter()
