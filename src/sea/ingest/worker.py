@@ -3,14 +3,11 @@ from __future__ import annotations
 import array
 from collections import Counter
 from dataclasses import dataclass
-import struct
 from time import perf_counter
 from typing import List, Tuple, Dict
-import os
-import collections
 import enum
 
-from sea.index.tokenization import get_tokenizer
+from sea.storage.IO import BlockIO
 from sea.utils.config import Config  # only needed for _write_block_to_disk
 
 class Columns(enum.Enum):
@@ -37,9 +34,9 @@ class BatchResult:
 _worker: "Worker | None" = None
 
 class Worker:
-    def __init__(self, store_positions: bool, tokenizer):
+    def __init__(self, store_positions: bool):
         self.store_positions = store_positions
-        self.tokenizer = tokenizer
+        self.blockIO = BlockIO()
 
     # public entry point used by the parent to process one batch
     def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> Dict[int, list[str]]:
@@ -49,7 +46,7 @@ class Worker:
         metadata, index = self._create_batch_index(lines)
         print(f"[{block_id}] index built")
         t1 = perf_counter()
-        self._write_block_to_disk(block_id, index)
+        self.blockIO.write_block(block_id, index)
         print(f"[{block_id}] written to disk")
         t2 = perf_counter()
 
@@ -63,27 +60,6 @@ class Worker:
         return BatchResult(metadata=metadata, timings=timings)
 
     # ------------- internals -------------
-
-    def _write_block_to_disk(self, block_id: str, index: Dict[str, array.array[int]]) -> None:
-        cfg = Config(load=True)
-        os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
-
-        path = os.path.join(cfg.BLOCK_PATH, f"tokenizer_output_{block_id}.bin")
-        ordered = collections.OrderedDict(sorted(index.items()))
-
-        with open(path, "wb") as out:
-            out.write(b"SEAB\x01")  # magic + version 
-            for term, arr in ordered.items():
-                # ensure uint32 array
-                if arr.typecode != "I":
-                    arr = array("I", arr)
-
-                tb = term.encode("utf-8")
-                out.write(struct.pack("<I", len(tb)))
-                out.write(tb)
-
-                out.write(struct.pack("<I", len(arr)))
-                out.write(arr.tobytes())
 
     def _create_batch_index(self, lines: List[Tuple[int, str]]):
         batch: list[List[str]] = []
@@ -109,7 +85,6 @@ class Worker:
 
     def _doc_to_postings(self,index : dict[str, array.array[int]],  metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
-        # tokens = self.tokenizer.tokenize(f'{doc[2]} {doc[3]}')  # title + body
         tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
 
         if self.store_positions:
@@ -138,11 +113,9 @@ def init_worker():
     """
     global _worker
 
-    # tok = get_tokenizer()  # whatever your get_tokenizer expects (dict/dataclass)
-    tok = None # simple whitespace tokenizer
-
-    store_positions = True
-    _worker = Worker(store_positions=store_positions, tokenizer=tok)
+    cfg = Config(load=True)
+    store_positions = cfg.TOKENIZER.STORE_POSITIONS
+    _worker = Worker(store_positions=store_positions)
 
 def process_batch(block_id: str, lines: List[Tuple[int, str]]):
     """
