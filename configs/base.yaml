@@ -16,8 +16,12 @@ TOKENIZER:
 
 REDIS_HOST: "localhost"
 REDIS_PORT: 6379
-DOCUMENTS: "msmarco-docs.tsv"
+DOCUMENTS: "data/msmarco-docs.tsv"
+DATA_PATH: "data/"
 BLOCK_PATH: "data/blocks/"
+HEADER_BLOCK_FILE: "SEAB\x01"
+HEADER_INDEX_FILE: "SEAI\x01"
+HEADER_POSTING_FILE: "SEAP\x01"
 LOG_PATH: "data/log.txt"
 REDIS_PROD: 
   HOST: "seenar.cloud.sci.hpi.de"
@@ -28,8 +32,8 @@ SEARCH:
   MAX_RESULTS: 10
 
 INGESTION:
-  NUM_DOCUMENTS: 60000
-  BATCH_SIZE: 2500
+  NUM_DOCUMENTS: 10000
+  BATCH_SIZE: 1000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"

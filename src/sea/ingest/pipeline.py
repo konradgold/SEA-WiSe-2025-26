@@ -1,9 +1,12 @@
-from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, as_completed, wait
+from array import array
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import heapq
 import multiprocessing as mp
 import os
+import struct
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Iterator, List, Tuple
+from typing import Iterable, Iterator, List, Tuple
 
 from sea.ingest.worker import  BatchTimings, init_worker, process_batch
 import logging
@@ -13,8 +16,6 @@ from sea.utils.logger import dir_size, write_message_to_log_file
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
-
 class Ingestion:
     """
     Ingest documents into the database
@@ -22,7 +23,6 @@ class Ingestion:
     """
     # def __init__(self, db, processors: list[Processor], document_path:str):
     def __init__(self, document_path:str):
-
         self.document_path = document_path
 
 
@@ -30,6 +30,7 @@ class Ingestion:
         return PROC.memory_info().rss / (1024**2)
 
     def ingest(self, num_documents: int = 1000, batch_size: int = 500):
+        #TODO: adjust batch size based on L1 cache size of CPU
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
 
@@ -44,6 +45,8 @@ class Ingestion:
         counter = SimpleNamespace(value = 0)
 
         submitted = 0
+
+        self._clear_existing_blocks()
 
         def submit_next(ex):
             nonlocal submitted
@@ -71,7 +74,6 @@ class Ingestion:
                 initializer=init_worker,
                 initargs=(),
             ) as ex:
-
 
                 # prefill the queue
                 pending = set()
@@ -127,6 +129,12 @@ class Ingestion:
                 f"total={total_bytes_/1_048_576:.2f} MiB ({(total_bytes_/total_docs)/1_024:.2f} KiB/doc)")
         print(time_measurement)
         write_message_to_log_file(time_measurement)
+    
+    def _clear_existing_blocks(self):
+        cfg = Config(load=True)
+        if os.path.exists(cfg.BLOCK_PATH):
+            for f in os.listdir(cfg.BLOCK_PATH):
+                os.remove(os.path.join(cfg.BLOCK_PATH, f))
 
     def _merge(self, a: dict, b: dict) -> None:
         # in-place merge: {tok: {doc: val}}
@@ -145,7 +153,6 @@ class Ingestion:
         if buf:
             yield buf
 
-
     def _execute_pipe(self, pipeline, keys_in_batch, inserted_keys, total_inserted):
         results = pipeline.execute()
         # Track which keys were newly inserted
@@ -156,10 +163,124 @@ class Ingestion:
         total_inserted += ingested_now
         return total_inserted
 
+class KMerger():
+    """
+    K-way merger for sorted posting lists stored on disk
+    """
+
+    def __init__(self, block_path: str):
+        self.block_path = block_path
+
+    def merge_blocks(self):
+        cfg = Config(load=True)
+        start = perf_counter()
+        posting_path = os.path.join(cfg.DATA_PATH, "posting_list.bin")
+        posting_list_file = open(posting_path, "w+b")
+        posting_list_file.write(cfg.HEADER_POSTING_FILE.encode("utf-8"))
+
+        index_path = os.path.join(cfg.DATA_PATH, "term_dictionary.bin")
+        index_file = open(index_path, "w+b")
+        index_file.write(cfg.HEADER_INDEX_FILE.encode("utf-8"))
+
+        if os.path.exists(self.block_path):
+            file_names = os.listdir(self.block_path)
+            print(f"Merging {len(file_names)} blocks from {self.block_path}...")
+            file_paths = [os.path.join(self.block_path, f) for f in file_names]
+
+            terms_merged = 0
+
+            for term, posting_list in self._merge_sorted_files(file_paths):
+                disk_offset, length = self._add_posting_to_disk(posting_list_file, posting_list)
+                self._add_index_entry_to_disk(index_file, term, disk_offset, length)
+                terms_merged += 1
+                if terms_merged % 100000 == 0:
+                    print(f"Merged {terms_merged} terms...")
+            print(f"Total merged terms: {terms_merged}")
+            posting_list_file.close()
+            index_file.close()
+        else:
+            print(f"No blocks found in {self.block_path} to merge.")
+        end = perf_counter()
+        print(f"Merge completed in {end - start:.2f} seconds.")
+
+    def _add_posting_to_disk(self, posting_file ,posting_list: array) -> Tuple[int, int]:
+        start = posting_file.tell()
+
+        posting_file.write(struct.pack("<I", len(posting_list)))
+        posting_file.write(posting_list.tobytes())
+
+        end = posting_file.tell()
+        return [start, end - start]
+
+    def _add_index_entry_to_disk(self, index_file, term: str, disk_offset: int, posting_length: int) -> None:
+        term = term.encode("utf-8")
+        index_file.write(struct.pack("<I", len(term)))
+        index_file.write(term)
+
+        index_file.write(struct.pack("<Q", disk_offset))      
+        index_file.write(struct.pack("<I", posting_length))  
+
+    def _merge_sorted_files(self, paths: List[str]) -> Iterable[Tuple[str, array]]:
+        files = [open(p, "rb") for p in paths]
+        heap: List[Tuple[str, int, array.array[int]]] = []
+        try:
+            [self._read_magic_header(f) for f in files]
+
+            for i, f in enumerate(files):
+                term, arr = self._read_posting_line(f)
+                if term:
+                    heapq.heappush(heap, (term, i, arr))
+
+            while heap:
+                files_to_read = []
+
+                term, i, arr = heapq.heappop(heap)
+                files_to_read.append(i)
+                # pop until different term
+                while heap and heap[0][0] == term:
+                    _, j, arr2 = heapq.heappop(heap)
+                    arr.extend(arr2)
+                    files_to_read.append(j)
+                yield term, arr
+                # push next from read files
+                for i in files_to_read:
+                    nxt_term, arr = self._read_posting_line(files[i])
+                    if nxt_term:
+                        heapq.heappush(heap, (nxt_term, i, arr))
+        finally:
+            for f in files:
+                f.close()
+
+    def _read_magic_header(self, file):
+        magic_version = file.read(5)
+        if magic_version != b"SEAB\x01":
+            raise ValueError("Bad magic/version")
+        
+
+
+    def _read_posting_line(self, file):
+        lb = file.read(4)
+        if not lb:
+            #TODO: delete file if reach EOF
+            print("No more terms")
+            return None, None
+            # break
+        (term_len,) = struct.unpack("<I", lb)
+        term = file.read(term_len).decode("utf-8")
+        (count,) = struct.unpack("<I", file.read(4))
+        buf = file.read(count * 4)
+        arr = array("I")
+        arr.frombytes(buf)  # uint32 little-endian
+        return term, arr
+
 def main():
     cfg = Config(load=True)
-    ingestion = Ingestion(cfg.DOCUMENTS)
-    ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
+    # ingestion = Ingestion(cfg.DOCUMENTS)
+    # ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
+
+    merger = KMerger(cfg.BLOCK_PATH)
+    merger.merge_blocks()
+
 
 if __name__ == "__main__":
     main()

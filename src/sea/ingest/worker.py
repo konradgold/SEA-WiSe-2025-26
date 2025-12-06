@@ -1,12 +1,11 @@
 # sea/ingest/worker.py
 from __future__ import annotations
 import array
-from collections import defaultdict, Counter
+from collections import Counter
 from dataclasses import dataclass
 import struct
 from time import perf_counter
-from typing import Any, List, Tuple, Dict
-import json
+from typing import List, Tuple, Dict
 import os
 import collections
 import enum
@@ -73,7 +72,7 @@ class Worker:
         ordered = collections.OrderedDict(sorted(index.items()))
 
         with open(path, "wb") as out:
-            out.write(b"SEAB\x01")  # magic + version 1
+            out.write(b"SEAB\x01")  # magic + version 
             for term, arr in ordered.items():
                 # ensure uint32 array
                 if arr.typecode != "I":
