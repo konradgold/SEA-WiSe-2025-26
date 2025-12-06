@@ -70,3 +70,14 @@ Performance of key functions is printed automatically. The base.yaml specifies t
 ```bash
 uv run python -m sea.perf.runner
 ```
+
+## Profile application
+Run the following line to track script performance
+```bash
+uv run python -m cProfile -o profile.pstats -m sea.ingest.pipeline
+```
+With the next command, you are able to view the performance measurement:
+```bash
+uvx snakeviz profile.pstats
+```
+
