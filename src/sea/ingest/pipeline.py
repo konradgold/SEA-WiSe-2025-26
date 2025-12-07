@@ -57,7 +57,7 @@ class Ingestion:
                 return None
             fut = ex.submit(process_batch, f"{submitted}", lines)
             submitted += 1
-            print(f"Docs {counter.value} / {num_documents} submitted for processing.")
+            print(f"Docs {counter.value:,} / {num_documents:,} submitted for processing.")
             return fut
 
         print(f"Starting ingestion of {num_documents} documents from {self.document_path}...")

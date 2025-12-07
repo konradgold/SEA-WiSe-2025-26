@@ -19,12 +19,13 @@ class KMerger():
 
     def merge_blocks(self):
         start = perf_counter()
+        terms_merged = 0
         if os.path.exists(self.block_path):
             file_names = os.listdir(self.block_path)
             print(f"Merging {len(file_names)} blocks from {self.block_path}...")
             file_paths = [os.path.join(self.block_path, f) for f in file_names]
 
-            terms_merged = 0
+            
 
             for term, posting_list in self._merge_sorted_files(file_paths):
                 self.storageManager.write_term_posting_list(term, posting_list)
@@ -40,7 +41,7 @@ class KMerger():
 
     def _merge_sorted_files(self, paths: List[str]) -> Iterable[Tuple[str, array]]:
         files = [open(p, "rb") for p in paths]
-        heap: List[Tuple[str, int, array.array[int]]] = []
+        heap: List[Tuple[str, int, array[int]]] = []
         try:
             [self.blockIO.check_magic_header(f) for f in files]
 

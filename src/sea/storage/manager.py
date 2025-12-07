@@ -1,4 +1,4 @@
-import array
+from array import array
 from typing import Dict, Optional, Tuple
 
 from sea.storage.IO import DocDictonaryIO, TermDictionaryIO, PostingListIO
@@ -23,7 +23,7 @@ class StorageManager:
     def init_all(self):
         self.getDocMetadata()
 
-    def write_term_posting_list(self, term: str, posting_list: array.array):
+    def write_term_posting_list(self, term: str, posting_list: array):
         if self.rewrite:
             disk_offset, length = self.postingListIO.write(posting_list)
             self.termDictionaryIO.write(term, disk_offset, length)
@@ -40,10 +40,10 @@ class StorageManager:
             self.docMetadata = self.DocDictionaryIO.read()
         return self.docMetadata
 
-    def getPostingList(self, term :str) -> array.array | None:
+    def getPostingList(self, term :str) -> array | None:
         disk_offset, length = self.getTermDictionary().get(term, (-1, -1))
         if disk_offset == -1:
-            return None  # empty posting list
+            return array("I")  # empty posting list
         return self.postingListIO.read(disk_offset, length)
     
     def getDocMetadataEntry(self, doc_id: int) -> Tuple[str, int]:
