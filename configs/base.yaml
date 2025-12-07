@@ -1,6 +1,6 @@
 TOKENIZER:
   MIN_LEN: 2
-  BACKEND: "simple"  # options: "simple", "spacy"
+  BACKEND: "fastbert"  # options: "simple", "spacy", "fastbert"
   LOWERCASE: true
   ASCII_FOLD: false
   REMOVE_STOPWORDS: true
@@ -33,8 +33,8 @@ SEARCH:
   MAX_RESULTS: 10
 
 INGESTION:
-  NUM_DOCUMENTS: 1000
-  BATCH_SIZE: 100
+  NUM_DOCUMENTS: 100000
+  BATCH_SIZE: 1000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"

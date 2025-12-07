@@ -105,6 +105,7 @@ class _ConfiguredTokenizer(TokenizerAbstract):
 def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     from .simple_tokenizer import SimpleTokenizer
     from .spacy_tokenizer import SpacyTokenizer
+    from .fast_tokenizer import FastBertTokenizer
 
     config_yaml = cfg if cfg is not None else Config()
     backend_name = _default_backend(config_yaml)
@@ -125,6 +126,8 @@ def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
             model=model, disable=list(disable) if disable else None
         )
         return _ConfiguredTokenizer(backend=backend, cfg=tkcfg, stopwords=stop)
+    elif backend_name == "fastbert":
+        return FastBertTokenizer()
     return SimpleTokenizer(config=tkcfg, stopwords=stop)
 
 
