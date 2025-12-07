@@ -83,7 +83,7 @@ class Worker:
             self._doc_to_postings(index, metadata, doc)
         return index
 
-    def _doc_to_postings(self,index : dict[str, array.array[int]],  metadata: Dict[int, list[str]], doc: list[str]):
+    def _doc_to_postings(self, index: dict[str, array.array[int]], metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
         tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
 
