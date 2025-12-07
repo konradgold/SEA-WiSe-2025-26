@@ -9,13 +9,14 @@ from sea.query.parser import QueryParser
 from sea.storage.interface import get_storage
 from sea.utils.config import Config
 import time
-
+from sea.ranking.utils import Document
 
 
 @perf_indicator("search", "queries")
 def search_documents(redis_client, query, max_output_result=10):
     # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
-    query_parser = QueryParser(cfg=Config())
+    cfg = Config(load=True)
+    query_parser = QueryParser(cfg=cfg)
     root_operator = query_parser.process_phrase2query(query)
     matches = root_operator.execute(redis_client, get_tokenizer())
     if not matches:
@@ -28,7 +29,12 @@ def search_documents(redis_client, query, max_output_result=10):
         doc_content = redis_client.get(match)
         if doc_content:
             doc_json = json.loads(doc_content)
-            out_matches.append((match, doc_json.get("title", ""), doc_json.get("link", "")))
+            out_matches.append(Document(
+                doc_id=match,
+                title=doc_json.get("title", ""),
+                link=doc_json.get("link", ""),
+                content=doc_json.get("content", None)
+            ))
     return out_matches, num_matches
 
 def main():
@@ -65,14 +71,20 @@ def main():
 
         history.append_string(query)
         t0 = time.time()
-        results, num_matches = search_documents(client, query, max_output_result)
+        if cfg.SEARCH.RANKER is not None:
+            from sea.ranking import RankersRegistry
+            ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKER)
+            ranker = ranker_builder()
+            tokens = get_tokenizer().tokenize(query)
+            documents = ranker(tokens)
+            num_matches = len(documents)
+        else:
+            documents, num_matches = search_documents(client, query, max_output_result)
         elapsed = (time.time() - t0)*1000
 
-        if results:
-            for key, title, link in results:
-                print(f"\n{key}:")
-                print(title)
-                print(link)
+        if documents:
+            for doc in documents:
+                doc.pprint(verbose=cfg.SEARCH.VERBOSE_OUTPUT, loud=True)
 
             print(f"\nFound {num_matches} matches in {elapsed:.2f} milliseconds.")
         else:

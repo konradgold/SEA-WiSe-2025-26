@@ -1,0 +1,1 @@
+from sea.ranking.io_wrapper import RankersRegistry

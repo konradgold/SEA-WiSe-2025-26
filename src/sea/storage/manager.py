@@ -1,23 +1,29 @@
 import array
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from sea.storage.IO import DocDictonaryIO, TermDictionaryIO, PostingListIO
+from sea.utils.config import Config
 
 
 class StorageManager:
 
     # if rewrite is True, files are opened in write mode (existing files will be overwritten)
     # if rewrite is False, files are opened in read mode
-    def __init__(self, rewrite: bool = False):
+    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
         self.rewrite = rewrite
-        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite)
-        self.postingListIO = PostingListIO(rewrite=rewrite)
-        self.DocDictionaryIO = DocDictonaryIO(rewrite=rewrite)
+        if cfg is None:
+            cfg = Config(load=True)
+        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg)
+        self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg)
+        self.DocDictionaryIO = DocDictonaryIO(rewrite=rewrite, cfg=cfg)
 
         self.termDictionary: Dict[str, Tuple[int, int]] = {}
         self.docMetadata: Dict[int, Tuple[str, int]] = {}
 
-    def write_term_posting_list(self, term: str, posting_list: array):
+    def init_all(self):
+        self.getDocMetadata()
+
+    def write_term_posting_list(self, term: str, posting_list: array.array):
         if self.rewrite:
             disk_offset, length = self.postingListIO.write(posting_list)
             self.termDictionaryIO.write(term, disk_offset, length)
@@ -29,15 +35,15 @@ class StorageManager:
             self.termDictionary = self.termDictionaryIO.read()
         return self.termDictionary
     
-    def getDocMetadata(self) -> Tuple[str, int]:
+    def getDocMetadata(self) -> Dict[int, Tuple[str, int]]:
         if not self.docMetadata:
             self.docMetadata = self.DocDictionaryIO.read()
         return self.docMetadata
 
-    def getPostingList(self, term :str) -> array:
+    def getPostingList(self, term :str) -> array.array | None:
         disk_offset, length = self.getTermDictionary().get(term, (-1, -1))
         if disk_offset == -1:
-            return array.array("I")  # empty posting list
+            return None  # empty posting list
         return self.postingListIO.read(disk_offset, length)
     
     def getDocMetadataEntry(self, doc_id: int) -> Tuple[str, int]:

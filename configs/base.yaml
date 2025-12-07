@@ -32,6 +32,7 @@ REDIS_PROD:
 SEARCH:
   MAX_RESULTS: 10
   EXPAND_QUERIES: true
+  RANKING: "bm25" # options: "tfidf", "bm25", none
 
 INGESTION:
   NUM_DOCUMENTS: 1000
