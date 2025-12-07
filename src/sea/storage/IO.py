@@ -186,7 +186,7 @@ class PostingListIO():
         self.posting_file.write(posting_list.tobytes())
 
         end = self.posting_file.tell()
-        return [start, end - start]
+        return (start, end - start)
         
     def close(self):
         self.posting_file.close()
