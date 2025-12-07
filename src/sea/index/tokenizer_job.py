@@ -1,5 +1,4 @@
 from functools import partial
-from typing import List
 from dotenv import load_dotenv
 import os
 import json
