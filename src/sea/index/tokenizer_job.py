@@ -7,7 +7,7 @@ from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
 from sea.storage.interface import LocalStorage, get_storage
 from sea.utils.config import Config
-from collections import Counter
+from collections import Counter, defaultdict
 
 
 logging.basicConfig(level=logging.INFO)
@@ -60,7 +60,7 @@ def tokenize_documents(docs, pool, local_tokenizer):
     if pool and len(docs) > 1:
         return pool.map(_tokenize_doc, docs)
     return [
-        (doc_key, local_tokenizer.tokenize(body_text)) for doc_key, body_text in docs
+        (doc["doc_id"], local_tokenizer.tokenize(doc["title"] + " " + doc["body"])) for doc in docs
     ]
 
 

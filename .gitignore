@@ -209,6 +209,11 @@ __marimo__/
 
 
 msmarco-docs.*
+data/log.txt
+data/*
+notebooks/*.bin
+notebooks/*.txt
+*.pstats
 
 # Mac OS
 .DS_Store
