@@ -102,7 +102,7 @@ class Worker:
         else:
             for tok, tf in Counter(tokens).items():
                 index[tok].append(doc_id)
-                index[tok].append(len(tf))
+                index[tok].append(tf)
 
         metadata[doc_id].append(len(tokens))
 
