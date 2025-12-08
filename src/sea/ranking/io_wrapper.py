@@ -2,38 +2,30 @@ import abc
 from array import array
 from time import perf_counter
 from typing import List, Optional
-import polars as pl
+import pickle
+import tqdm
 from sea.utils.config import Config
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List
 from sea.ranking.utils import Document, RankingRegistry
 from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
 from sea.storage.manager import StorageManager
-import pandas as pd
-from io import StringIO
 
-def read_tsv_rows(tsv_path: str, row_numbers: list[int], sep='\t', header=None) -> pd.DataFrame:
-    row_numbers = sorted(row_numbers)
-    
-    target_lines = []
-    header_line = None
+def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
+    offsets = []
+    with open(tsv_path, 'rb') as f:
+        offsets.append(0)
+        f.readline()
 
+        for i, line in tqdm.tqdm(enumerate(f, 1)):
+            if i % interval == 0:
+                offsets.append(f.tell())
     
-    with open(tsv_path, 'r', encoding='utf-8', errors='ignore') as f:
-        # Handle header
-        if header is not None:
-            header_line = next(f)
-        
-        # Jump directly to target lines
-        target_idx = 0
-        for i, line in enumerate(f):
-            if target_idx < len(row_numbers) and i == row_numbers[target_idx]:
-                target_lines.append(line)
-                target_idx += 1
-            if target_idx >= len(row_numbers):
-                break  # Found all targets, STOP READING!
-    
-    # Build content
-    content = (header_line or '') + ''.join(target_lines)
-    return pd.read_csv(StringIO(content), sep=sep, header=header)
+    with open(index_path, 'wb') as f:
+        pickle.dump(offsets, f)
+    return offsets
+
 
 class RankerAdapter(abc.ABC):
 
@@ -44,10 +36,19 @@ class RankerAdapter(abc.ABC):
         self.cfg = cfg
         self.storage_manager = storage_manager
         self.storage_manager.init_all()
-        print("Loading document offsets into memory...")
-        df = pl.scan_csv(self.cfg.DOCUMENTS, separator='\t', infer_schema_length=0)
-        print("Collecting document offsets...")
-        self.row_offsets = df.select(pl.int_range(0, 100000).alias('row')).collect()
+        if os.path.exists(cfg.DOCUMENT_OFFSETS):
+            with open(cfg.DOCUMENT_OFFSETS, 'rb') as f:
+                self.offsets = pickle.load(f)
+        else:
+            print("Building document offsets index...")
+            self.offsets = build_index(
+                tsv_path=cfg.DOCUMENTS,
+                interval=cfg.INDEX_INTERVAL,
+                index_path=cfg.DOCUMENT_OFFSETS
+            )
+        self.interval = cfg.INDEX_INTERVAL
+        self.num_threads = os.cpu_count() - 2 if os.cpu_count() is not None and os.cpu_count() > 2 else 1
+        print(f"Using {self.num_threads} threads for document reading.")
         
 
     def __call__(self, tokens: list) -> list[Document]:
@@ -70,28 +71,74 @@ class RankerAdapter(abc.ABC):
             if processed_token:
                 token_list.append(processed_token)
         return token_list
-    
+
+    def _get_lines(self, row_numbers: list[int]) -> List[List[str]]:
+        """Multithreaded batched version - divides sorted rows among threads"""
+        
+        def fetch_batch(batch_rows):
+            """Each thread processes a batch sequentially with one file handle"""
+            results = {}
+            with open(self.cfg.DOCUMENTS, 'rb') as f:
+                for row_num in batch_rows:
+                    index = row_num // self.interval
+                    steps = row_num % self.interval
+                    
+                    f.seek(self.offsets[index]-f.tell(), 1)
+                    
+                    for _ in range(steps):
+                        f.readline()
+                    
+                    line = f.readline()
+                    results[row_num] = line.decode('utf-8').rstrip('\n').split('\t')
+            
+            return results
+        
+        t0 = perf_counter()
+        
+        # Sort once
+        sorted_rows = sorted(row_numbers)
+        
+        # Divide into batches for each thread
+        
+        batch_size = len(sorted_rows) // self.num_threads
+        batches = []
+        
+        for i in range(self.num_threads):
+            start_idx = i * batch_size
+            end_idx = start_idx + batch_size if i < self.num_threads - 1 else len(sorted_rows)
+            if start_idx < len(sorted_rows):
+                batches.append(sorted_rows[start_idx:end_idx])
+        
+        # Process batches in parallel
+        all_results = {}
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = [executor.submit(fetch_batch, batch) for batch in batches]
+            
+            for future in as_completed(futures):
+                batch_results = future.result()
+                all_results.update(batch_results)
+        
+        # Return in original order
+        documents_output = [all_results[i] for i in row_numbers]
+        
+        elapsed = (perf_counter() - t0) * 1000
+        print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
+        
+        return documents_output
+        
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
         print(f"Reading {len(ranked_results)} documents from disk...")
-        ranked_results.sort(key=lambda x: x[0])
         row_numbers = [doc_line for doc_line, _ in ranked_results]
-        t0 = perf_counter()
-        target_rows = self.row_offsets.filter(pl.col('row').is_in(row_numbers))
-        target_rows = target_rows.sort('row').collect()
-        t1 = perf_counter()
-        print(f"Read {len(ranked_results)} documents in {(t1 - t0)*1000:.1f} ms")
+        ranked_results.sort(key=lambda x: x[0])
+        documents_output = self._get_lines(row_numbers)
         
-        documents_output = []
-        # Assuming df columns: doc_id, link, title, content
-        valid_mask = target_rows.notna().sum(axis=1) == 4
-        valid_docs = target_rows[valid_mask].head(len(ranked_results)).reset_index(drop=True)
 
         documents_output = [
             Document(
                 doc_id=row[0], link=row[1], title=row[2], content=row[3],
                 score=ranked_results[i][1]
             )
-            for i, row in enumerate(valid_docs.itertuples(index=False))
+            for i, row in enumerate(documents_output)
         ]
 
         doc_outputs = sorted(documents_output, reverse=True)

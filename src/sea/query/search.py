@@ -13,12 +13,12 @@ from sea.ranking.utils import Document
 
 
 @perf_indicator("search", "queries")
-def search_documents(redis_client, query, max_output_result=10):
+def search_documents(redis_client, query, max_output_result=10, tokenizer=None):
     # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
     cfg = Config(load=True)
     query_parser = QueryParser(cfg=cfg)
     root_operator = query_parser.process_phrase2query(query)
-    matches = root_operator.execute(redis_client, get_tokenizer())
+    matches = root_operator.execute(redis_client, tokenizer)
     if not matches:
         return []
     num_matches = len(matches)
@@ -52,6 +52,7 @@ def main():
         from sea.ranking import RankersRegistry
         ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKING)
         ranker = ranker_builder()
+    tokenizer = get_tokenizer()
 
     while True:
         try:
@@ -65,7 +66,10 @@ def main():
             continue
 
         if splade_encoder:
+            t_exp = time.time()
             expansion_tokens = splade_encoder.expand(query)
+            elapsed_exp = (time.time() - t_exp)*1000
+            print(f"Expansion took {elapsed_exp:.2f} milliseconds.")
             if expansion_tokens:
                 print(f"Expanded query tokens: {expansion_tokens}")
                 query = " ".join(expansion_tokens)
@@ -74,11 +78,15 @@ def main():
         history.append_string(query)
         t0 = time.time()
         if cfg.SEARCH.RANKING is not None:
-            tokens = get_tokenizer().tokenize(query)
+            t_tok = time.time()
+            tokens = tokenizer.tokenize(query)
+            elapsed_tok = (time.time() - t_tok)*1000
+            print(f"Tokenization took {elapsed_tok:.2f} milliseconds.")
+            t0 = time.time()
             documents = ranker(tokens)  # type: ignore
             num_matches = len(documents)
         else:
-            documents, num_matches = search_documents(client, query, max_output_result)
+            documents, num_matches = search_documents(client, query, max_output_result, tokenizer)
         elapsed = (time.time() - t0)*1000
 
         if documents:

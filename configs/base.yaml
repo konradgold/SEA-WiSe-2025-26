@@ -17,6 +17,8 @@ TOKENIZER:
 REDIS_HOST: "localhost"
 REDIS_PORT: 6379
 DOCUMENTS: "data/msmarco-docs.tsv"
+DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
+INDEX_INTERVAL: 50
 DATA_PATH: "data/"
 BLOCK_PATH: "data/blocks/"
 HEADER_BLOCK_FILE: "SEAB\x01"
@@ -34,6 +36,7 @@ SEARCH:
   EXPAND_QUERIES: true
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
+  VERBOSE_OUTPUT: true
 
 BM25:
   K1: 1.5
