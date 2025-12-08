@@ -33,6 +33,11 @@ SEARCH:
   MAX_RESULTS: 10
   EXPAND_QUERIES: true
   RANKING: "bm25" # options: "tfidf", "bm25", none
+  NUM_DOCS: 100000
+
+BM25:
+  K1: 1.5
+  B: 0.75
 
 INGESTION:
   NUM_DOCUMENTS: 100000

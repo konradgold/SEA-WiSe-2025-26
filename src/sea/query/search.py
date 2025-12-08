@@ -48,10 +48,12 @@ def main():
     if cfg.SEARCH.EXPAND_QUERIES:
         from sea.query.splade import SpladeEncoder
         splade_encoder = SpladeEncoder(cfg=cfg)
-
+    if cfg.SEARCH.RANKING is not None:
+        from sea.ranking import RankersRegistry
+        ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKING)
+        ranker = ranker_builder()
 
     while True:
-        
         try:
             query = session.prompt("\nEnter your search query (or 'quit' to exit):\n> ")
         except EOFError:
@@ -66,17 +68,14 @@ def main():
             expansion_tokens = splade_encoder.expand(query)
             if expansion_tokens:
                 print(f"Expanded query tokens: {expansion_tokens}")
-                query = " or ".join(expansion_tokens)
+                query = " ".join(expansion_tokens)
                 print(query)
 
         history.append_string(query)
         t0 = time.time()
-        if cfg.SEARCH.RANKER is not None:
-            from sea.ranking import RankersRegistry
-            ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKER)
-            ranker = ranker_builder()
+        if cfg.SEARCH.RANKING is not None:
             tokens = get_tokenizer().tokenize(query)
-            documents = ranker(tokens)
+            documents = ranker(tokens)  # type: ignore
             num_matches = len(documents)
         else:
             documents, num_matches = search_documents(client, query, max_output_result)

@@ -7,8 +7,8 @@ NUM_DOCS=3_300_000
 class Ranking(abc.ABC):
 
     def __init__(self, cfg):
-        self.num_docs = cfg.get('NUM_DOCS', NUM_DOCS)
-        self.max_results = cfg.get('MAX_RESULTS', 10)
+        self.num_docs = cfg.SEARCH.NUM_DOCS if cfg.SEARCH.NUM_DOCS is not None else NUM_DOCS
+        self.max_results = cfg.SEARCH.MAX_RESULTS if cfg.SEARCH.MAX_RESULTS is not None else 10
     
     def __call__(self, tokens):
         return self.rank(tokens)
@@ -61,7 +61,7 @@ class BM25Ranking(Ranking):
     
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.avg_doc_len = cfg.get('AVG_DOC_LEN', 100.0)
+        self.avg_doc_len = cfg.SEARCH.AVG_DOC_LEN if cfg.SEARCH.AVG_DOC_LEN is not None else 100.0
         self.k1 = cfg.BM25.K1 if cfg.BM25.K1 is not None else 1.5
         self.b = cfg.BM25.B if cfg.BM25.B is not None else 0.75
 
