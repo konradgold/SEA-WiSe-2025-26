@@ -25,7 +25,7 @@ class SpladeEncoder:
         self.tokenizer.device = device
 
     def encode(self, text: str):
-        tokens = self.tokenizer(text, return_tensors='pt')
+        tokens = self.tokenizer(text, return_tensors='pt').to(self.device)
         output = self.model(**tokens)
         vec = torch.max(
             torch.log(
