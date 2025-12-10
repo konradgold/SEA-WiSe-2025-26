@@ -221,5 +221,5 @@ class ANDNOTOperator(AbstractOperator):
             result_2 = {doc.doc_id: doc for doc in result_2}
             result = {id: doc for id, doc in result_1.items() if id not in result_2}
             return list(result.values()), f"{query1} and not {query2}"
-        except:
+        except Exception:
             return [], ""
