@@ -9,7 +9,6 @@ from sea.query.parser import QueryParser
 from sea.storage.interface import get_storage
 from sea.utils.config import Config
 import time
-from sea.ranking.utils import Document
 from sea.ranking import RankersRegistry
 
 
