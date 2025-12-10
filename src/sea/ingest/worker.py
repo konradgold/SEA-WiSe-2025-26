@@ -9,6 +9,7 @@ import enum
 
 from sea.storage.IO import BlockIO
 from sea.utils.config import Config  # only needed for _write_block_to_disk
+from sea.index.tokenization import get_tokenizer
 
 class Columns(enum.Enum):
     doc_id = "doc_id"
@@ -37,6 +38,7 @@ class Worker:
     def __init__(self, store_positions: bool):
         self.store_positions = store_positions
         self.blockIO = BlockIO()
+        self.tokenizer = get_tokenizer(Config(load=True))
 
     # public entry point used by the parent to process one batch
     def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> Dict[int, list[str]]:
@@ -85,7 +87,9 @@ class Worker:
 
     def _doc_to_postings(self, index: dict[str, array.array[int]], metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
-        tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
+        title_tokens = self.tokenizer.tokenize(doc[2])
+        body_tokens = self.tokenizer.tokenize(doc[3])
+        tokens = title_tokens + body_tokens
 
         if self.store_positions:
             pos_by_tok: dict[str, array.array[int]] = {}
@@ -101,6 +105,8 @@ class Worker:
                 index[tok].extend(pos)
         else:
             for tok, tf in Counter(tokens).items():
+                if tok not in index:
+                    index[tok] = array.array("I")
                 index[tok].append(doc_id)
                 index[tok].append(tf)
 
