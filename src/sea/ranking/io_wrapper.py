@@ -160,7 +160,7 @@ class TFIDF(RankerAdapter):
         assert len_pl == len(pos_list)
         posting_dict = {}
         i = 0
-        while i < len_pl+1:
+        while i+1 < len_pl:
             posting_dict[pos_list[i]] = pos_list[i+1]
             i += 2 # Assuming that positions are not stored
         return posting_dict
