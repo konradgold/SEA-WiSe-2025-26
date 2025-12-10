@@ -9,7 +9,6 @@ import logging
 
 from sea.query.splade import SpladeEncoder
 from sea.ranking.io_wrapper import RankerAdapter
-from sea.ranking.io_wrapper import RankerAdapter
 from sea.ranking.utils import Document
 
 logger = logging.getLogger(__name__)
