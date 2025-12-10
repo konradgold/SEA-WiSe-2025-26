@@ -68,7 +68,7 @@ class QueryParser:
         try:
             # Not elegant, but necessary right now to pass splade_encoder to TermOperator
             query_elements[idx] = clazz(query_elements[idx], splade_encoder=self.splade_encoder)
-        except:
+        except Exception:
             query_elements[idx] = clazz(query_elements[idx])
         return query_elements
 
