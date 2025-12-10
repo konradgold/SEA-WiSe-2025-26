@@ -4,7 +4,6 @@ from prompt_toolkit.history import InMemoryHistory
 import sys
 from sea.index.tokenization import get_tokenizer
 from sea.perf.simple_perf import perf_indicator
-from sea.query import splade
 from sea.query.parser import QueryParser
 from sea.storage.interface import get_storage
 from sea.utils.config import Config

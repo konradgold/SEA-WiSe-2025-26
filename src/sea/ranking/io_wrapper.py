@@ -7,7 +7,6 @@ import tqdm
 from sea.utils.config import Config
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List
 from sea.ranking.utils import Document, RankingRegistry
 from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
 from sea.storage.manager import StorageManager

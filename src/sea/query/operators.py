@@ -2,8 +2,6 @@
 from abc import abstractmethod
 import json
 from typing import List, Optional, Tuple, final
-
-from regex import P
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
 import logging
 
@@ -25,10 +23,6 @@ class AbstractOperator:
     
     @abstractmethod
     def tokenize(self, tokenizer) -> TokenizerAbstract:
-        pass
-
-    @abstractmethod
-    def __str__(self) -> str:
         pass
 
 class TermOperator(AbstractOperator):
@@ -189,7 +183,7 @@ class ANDOperator(AbstractOperator):
             if len(intersection) == 0:
                 result, query = child.execute(r, tokenizer)
                 if result is not None:
-                    result_1 = {doc.doc_id: doc for doc in result}
+                    intersection = {doc.doc_id: doc for doc in result}
                 else:
                     return None, ""
                 final_query += " and " + query if final_query else query
@@ -197,10 +191,11 @@ class ANDOperator(AbstractOperator):
                 result_2, query = child.execute(r, tokenizer)
                 if result_2 is not None:
                     result_2 = {doc.doc_id: doc for doc in result_2}
-                    intersection = {doc_id: result_2[doc_id] for doc_id in result_2 if doc_id in result_1}
+                    intersection = {doc_id: intersection[doc_id] for doc_id in intersection if doc_id in result_2}
+                    for doc_id in intersection:
+                        intersection[doc_id].score += result_2[doc_id].score
                 final_query += " and " + query if final_query else query
-            for doc_id in intersection:
-                intersection[doc_id].score += result_1[doc_id].score
+            
         print(f"AND Operator result: {intersection}")
         return list(intersection.values()), final_query
     

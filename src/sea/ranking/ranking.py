@@ -19,17 +19,12 @@ class Ranking(abc.ABC):
     
     def rank(self, tokens: list[dict]) -> List[tuple[int, float]]:
         '''
-        Docstring for rank
-        
-        :param self: Description
-        :param results: Description
-        :type results: dict
-        :param tokens: Description
-        :type tokens: List[dict]
-        :return: Description
-        :rtype: List[tuple[int, float]]
+        Ranks documents based on the provided tokens.  
 
-        Returns a score for each result based on the provided tokens.
+        :param tokens: A list of token dictionaries, each representing query terms and their associated data for scoring.  
+        :type tokens: list[dict]  
+        :return: A list of tuples (doc_id, score), sorted by score in descending order, limited to the maximum number of results.  
+        :rtype: List[tuple[int, float]] 
         '''
         ranked_results = dict()
         for token in tokens:
