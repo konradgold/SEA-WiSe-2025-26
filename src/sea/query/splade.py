@@ -24,7 +24,7 @@ class SpladeEncoder:
         self.model.to(device)
         self.tokenizer.device = device
 
-    def encode(self, text):
+    def encode(self, text: str):
         tokens = self.tokenizer(text, return_tensors='pt')
         output = self.model(**tokens)
         vec = torch.max(
@@ -50,7 +50,7 @@ class SpladeEncoder:
         }
         return sparse_dict, sparse_dict_tokens
     
-    def expand(self, text):
+    def expand(self, text: str):
         _, sparse_dict_tokens = self.encode(text)
         tokens = set(sparse_dict_tokens.keys())
         input_tokens = set(self.tokenizer.tokenize(text))

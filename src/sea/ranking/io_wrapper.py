@@ -14,16 +14,16 @@ from sea.storage.manager import StorageManager
 
 def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
     offsets = []
-    with open(tsv_path, 'rb') as f:
+    with open(tsv_path, 'rb') as index:
         offsets.append(0)
-        f.readline()
+        index.readline()
 
-        for i, line in tqdm.tqdm(enumerate(f, 1)):
+        for i, line in tqdm.tqdm(enumerate(index, 1)):
             if i % interval == 0:
-                offsets.append(f.tell())
+                offsets.append(index.tell())
     
-    with open(index_path, 'wb') as f:
-        pickle.dump(offsets, f)
+    with open(index_path, 'wb') as index:
+        pickle.dump(offsets, index)
     return offsets
 
 
@@ -31,14 +31,15 @@ class RankerAdapter(abc.ABC):
 
     def __init__(self, ranker: Ranking, storage_manager: StorageManager, cfg: Optional[Config] = None):
         self.ranker = ranker
+        self.cut = cfg.SEARCH.IDF if cfg.SEARCH.IDF is not None else 100
         if cfg is None:
             cfg = Config(load=True)
         self.cfg = cfg
         self.storage_manager = storage_manager
         self.storage_manager.init_all()
         if os.path.exists(cfg.DOCUMENT_OFFSETS):
-            with open(cfg.DOCUMENT_OFFSETS, 'rb') as f:
-                self.offsets = pickle.load(f)
+            with open(cfg.DOCUMENT_OFFSETS, 'rb') as index:
+                self.offsets = pickle.load(index)
         else:
             print("Building document offsets index...")
             self.offsets = build_index(
@@ -49,7 +50,6 @@ class RankerAdapter(abc.ABC):
         self.interval = cfg.INDEX_INTERVAL
         self.num_threads = os.cpu_count() - 2 if os.cpu_count() is not None and os.cpu_count() > 2 else 1
         print(f"Using {self.num_threads} threads for document reading.")
-        
 
     def __call__(self, tokens: list) -> list[Document]:
         return self._retrieve_and_rank(tokens)
@@ -74,11 +74,14 @@ class RankerAdapter(abc.ABC):
 
     def _get_lines(self, row_numbers: list[int]) -> List[List[str]]:
         """Multithreaded batched version - divides sorted rows among threads"""
+
         
         def fetch_batch(batch_rows):
             """Each thread processes a batch sequentially with one file handle"""
             results = {}
             with open(self.cfg.DOCUMENTS, 'rb') as f:
+
+            
                 for row_num in batch_rows:
                     index = row_num // self.interval
                     steps = row_num % self.interval
@@ -159,7 +162,7 @@ class TFIDF(RankerAdapter):
         i = 0
         while i < len_pl+1:
             posting_dict[pos_list[i]] = pos_list[i+1]
-            i += pos_list[i+1] + 2
+            i += 2 # Assuming that positions are not stored
         return posting_dict
 
     
@@ -171,15 +174,18 @@ class BM25(RankerAdapter):
         assert len_pl == len(pos_list)
         posting_dict = {}
         i = 0
+        doc_ids = []
+        tfs = []
         while i+1 < len_pl:
-            doc_id = pos_list[i]
-            tf = pos_list[i+1]
+            doc_ids.append(pos_list[i])
+            tfs.append(pos_list[i+1])
+            i += 2 # Assuming that positions are not stored
+        if len(doc_ids) > self.cut:
+            print(f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}.")
+            return {}
+        for doc_id, tf in zip(doc_ids, tfs):
             doc_len = self.storage_manager.getDocMetadataEntry(doc_id)[1]
             posting_dict[doc_id] = (doc_len, tf)
-            i += pos_list[i+1] + 2
-        if len(posting_dict) > 1000:
-            return {}
-            print(f"Warning: Large posting list with {len(posting_dict)} entries encountered.")
         return posting_dict
     
 
