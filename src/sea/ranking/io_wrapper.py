@@ -30,10 +30,10 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
 class RankerAdapter(abc.ABC):
 
     def __init__(self, ranker: Ranking, storage_manager: StorageManager, cfg: Optional[Config] = None):
-        self.ranker = ranker
-        self.cut = cfg.SEARCH.IDF if cfg.SEARCH.IDF is not None else 100
         if cfg is None:
             cfg = Config(load=True)
+        self.ranker = ranker
+        self.cut = cfg.SEARCH.IDF if cfg.SEARCH.IDF is not None else 100
         self.cfg = cfg
         self.storage_manager = storage_manager
         self.storage_manager.init_all()
