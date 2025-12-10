@@ -1,4 +1,4 @@
-from sea.query.operators import ANDOperator, AbstractOperator, PhraseOperator, TermOperator
+from sea.query.operators import ANDOperator, AbstractOperator, PhraseOperator
 from sea.query.specs import Operators
 
 from typing import Callable, List
