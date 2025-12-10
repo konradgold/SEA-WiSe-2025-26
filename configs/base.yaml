@@ -11,7 +11,7 @@ TOKENIZER:
   NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 100000
   FLUSH_EVERY: 1000
-  STORE_POSITIONS: true
+  STORE_POSITIONS: false
   STORE_TOKENS: false
 
 REDIS_HOST: "localhost"
@@ -33,8 +33,8 @@ SEARCH:
   MAX_RESULTS: 10
 
 INGESTION:
-  NUM_DOCUMENTS: 1000
-  BATCH_SIZE: 100
+  NUM_DOCUMENTS: 100000
+  BATCH_SIZE: 10000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"
