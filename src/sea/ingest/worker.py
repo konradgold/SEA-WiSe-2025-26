@@ -7,6 +7,7 @@ from time import perf_counter
 from typing import List, Tuple, Dict
 import enum
 
+from sea.index.tokenization import get_tokenizer
 from sea.storage.IO import BlockIO
 from sea.utils.config import Config  # only needed for _write_block_to_disk
 
@@ -37,6 +38,7 @@ class Worker:
     def __init__(self, store_positions: bool):
         self.store_positions = store_positions
         self.blockIO = BlockIO()
+        self.tokenizer = get_tokenizer()
 
     # public entry point used by the parent to process one batch
     def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> Dict[int, list[str]]:
@@ -85,7 +87,8 @@ class Worker:
 
     def _doc_to_postings(self, index: dict[str, array.array[int]], metadata: Dict[int, list[str]], doc: list[str]):
         doc_id = doc[0] # use the running index as doc_id
-        tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
+        tokens = self.tokenizer.tokenize(doc[2] + " " + doc[3])
+        # tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
 
         pos_by_tok: dict[str, array.array[int]] = {}
         for i, tok in enumerate(tokens):
