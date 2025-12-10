@@ -30,6 +30,7 @@ class BlockIO:
             cfg = Config(load=True)
         self.magic_header_binary = cfg.HEADER_BLOCK_FILE.encode("utf-8")
         self.block_path = cfg.BLOCK_PATH
+        self.store_positions = cfg.TOKENIZER.STORE_POSITIONS
     
     def write_block(self, block_id: str, index: Dict[str, array]):
         path = self._get_block_path(block_id)
@@ -45,7 +46,6 @@ class BlockIO:
                 tb = term.encode("utf-8")
                 out.write(struct.pack("<I", len(tb)))
                 out.write(tb)
-
                 out.write(struct.pack("<I", len(arr)))
                 out.write(arr.tobytes())
 
@@ -58,15 +58,23 @@ class BlockIO:
             raise ValueError("Bad magic/version")
         
     def read_line(self, file) -> Optional[Tuple[str, array]]:
+    # if not self.store_positions array includes only the term frequency
         lb = file.read(4)
         if not lb:
             return None, None
         (term_len,) = struct.unpack("<I", lb)
         term = file.read(term_len).decode("utf-8")
-        (count,) = struct.unpack("<I", file.read(4))
-        buf = file.read(count * 4)
+
+        cb = file.read(4)
+        if len(cb) != 4:
+            raise EOFError(f"{getattr(file, 'name','<file>')}: truncated count")
+        (count,) = struct.unpack("<I", cb)
+
+        payload = file.read(count * 4)
+        if len(payload) != count * 4:
+            raise EOFError(f"{getattr(file, 'name','<file>')}: truncated payload")
         arr = array("I")
-        arr.frombytes(buf)  # uint32 little-endian
+        arr.frombytes(payload)
         return term, arr
     
 class TermDictionaryIO():

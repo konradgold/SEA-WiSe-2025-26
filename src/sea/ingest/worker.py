@@ -90,22 +90,18 @@ class Worker:
         tokens = self.tokenizer.tokenize(doc[2] + " " + doc[3])
         # tokens = doc[2].split() + doc[3].split()  # simple whitespace tokenizer
 
-        if self.store_positions:
-            pos_by_tok: dict[str, array.array[int]] = {}
-            for i, tok in enumerate(tokens):
-                if tok not in pos_by_tok:
-                    pos_by_tok[tok] = array.array('I')  # unsigned int
-                pos_by_tok[tok].append(i)
-            for tok, pos in pos_by_tok.items():
-                if tok not in index:
-                    index[tok] = array.array('I')  # unsigned int
-                index[tok].append(doc_id)
-                index[tok].append(len(pos))
+        pos_by_tok: dict[str, array.array[int]] = {}
+        for i, tok in enumerate(tokens):
+            if tok not in pos_by_tok:
+                pos_by_tok[tok] = array.array('I')  # unsigned int
+            pos_by_tok[tok].append(i)
+        for tok, pos in pos_by_tok.items():
+            if tok not in index:
+                index[tok] = array.array('I')  # unsigned int
+            index[tok].append(doc_id)
+            index[tok].append(len(pos))
+            if self.store_positions:
                 index[tok].extend(pos)
-        else:
-            for tok, tf in Counter(tokens).items():
-                index[tok].append(doc_id)
-                index[tok].append(tf)
 
         metadata[doc_id].append(len(tokens))
 
