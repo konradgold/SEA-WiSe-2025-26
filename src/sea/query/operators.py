@@ -90,7 +90,7 @@ class PhraseOperator(AbstractOperator):
         return tokenizer
 
     def execute(self, r, tokenizer: Optional[TokenizerAbstract]=None) -> Tuple[Optional[List[Document]], str]:
-        return NotImplementedError("Use execute_phrase_matching for phrase matching.")
+        raise NotImplementedError("Use execute_phrase_matching for phrase matching.")
         if not hasattr(self, 'tokens'):
             self.tokenize(tokenizer)
         if len(self.tokens) == 0:
