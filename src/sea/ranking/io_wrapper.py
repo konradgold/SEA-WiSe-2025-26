@@ -32,7 +32,9 @@ class RankerAdapter(abc.ABC):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
-        self.cut = cfg.SEARCH.IDF if cfg.SEARCH.IDF is not None else 100
+        self.cut = (
+            cfg.SEARCH.POSTINGS_CUT if cfg.SEARCH.POSTINGS_CUT is not None else 100
+        )
         self.cfg = cfg
         self.storage_manager = storage_manager
         self.storage_manager.init_all()
@@ -74,66 +76,63 @@ class RankerAdapter(abc.ABC):
     def _get_lines(self, row_numbers: list[int]) -> List[List[str]]:
         """Multithreaded batched version - divides sorted rows among threads"""
 
-        
         def fetch_batch(batch_rows):
             """Each thread processes a batch sequentially with one file handle"""
             results = {}
             with open(self.cfg.DOCUMENTS, 'rb') as f:
 
-            
                 for row_num in batch_rows:
                     index = row_num // self.interval
                     steps = row_num % self.interval
-                    
+
                     f.seek(self.offsets[index]-f.tell(), 1)
-                    
+
                     for _ in range(steps):
                         f.readline()
-                    
+
                     line = f.readline()
                     results[row_num] = line.decode('utf-8').rstrip('\n').split('\t')
-            
+
             return results
-        
+
         t0 = perf_counter()
-        
+
         # Sort once
         sorted_rows = sorted(row_numbers)
-        
+
         # Divide into batches for each thread
-        
+
         batch_size = len(sorted_rows) // self.num_threads
         batches = []
-        
+
         for i in range(self.num_threads):
             start_idx = i * batch_size
             end_idx = start_idx + batch_size if i < self.num_threads - 1 else len(sorted_rows)
             if start_idx < len(sorted_rows):
                 batches.append(sorted_rows[start_idx:end_idx])
-        
+
         # Process batches in parallel
         all_results = {}
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = [executor.submit(fetch_batch, batch) for batch in batches]
-            
+
             for future in as_completed(futures):
                 batch_results = future.result()
                 all_results.update(batch_results)
-        
+
         # Return in original order
         documents_output = [all_results[i] for i in row_numbers]
-        
+
         elapsed = (perf_counter() - t0) * 1000
         print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
-        
+
         return documents_output
-        
+
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
         print(f"Reading {len(ranked_results)} documents from disk...")
         row_numbers = [doc_line for doc_line, _ in ranked_results]
         ranked_results.sort(key=lambda x: x[0])
         documents_output = self._get_lines(row_numbers)
-        
 
         documents_output = [
             Document(
@@ -145,7 +144,7 @@ class RankerAdapter(abc.ABC):
 
         doc_outputs = sorted(documents_output, reverse=True)
         return doc_outputs
-    
+
     @abc.abstractmethod
     def process_posting_list(self, pl: array) -> dict:
         pass
@@ -164,7 +163,7 @@ class TFIDF(RankerAdapter):
             i += 2 # Assuming that positions are not stored
         return posting_dict
 
-    
+
 class BM25(RankerAdapter):     
     
     def process_posting_list(self, pl: array) -> dict[int, tuple[int, int]]:
@@ -186,7 +185,7 @@ class BM25(RankerAdapter):
             doc_len = self.storage_manager.getDocMetadataEntry(doc_id)[1]
             posting_dict[doc_id] = (doc_len, tf)
         return posting_dict
-    
+
 
 RankersRegistry = RankingRegistry()
 

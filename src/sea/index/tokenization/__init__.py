@@ -47,11 +47,7 @@ def _default_backend(cfg) -> str:
     env_backend = cfg.TOKENIZER.BACKEND
     if env_backend:
         return env_backend.lower()
-    try:
-        import spacy  # noqa: F401
-        return "spacy"
-    except Exception:
-        return "simple"
+    return "simple"
 
 
 def _env_bool(value: Any, default: bool) -> bool:
@@ -104,7 +100,6 @@ class _ConfiguredTokenizer(TokenizerAbstract):
 
 def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     from .simple_tokenizer import SimpleTokenizer
-    from .spacy_tokenizer import SpacyTokenizer
     from .fast_tokenizer import FastBertTokenizer
 
     config_yaml = cfg if cfg is not None else Config()
@@ -119,14 +114,7 @@ def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     )
     stop = get_default_stopwords() if tkcfg.remove_stopwords else set()
 
-    if backend_name == "spacy":
-        model = config_yaml.TOKENIZER.SPACY_MODEL
-        disable = tuple(filter(None, (config_yaml.TOKENIZER.SPACY_DISABLE.split(",") if config_yaml.TOKENIZER.SPACY_DISABLE else [])))
-        backend = SpacyTokenizer(
-            model=model, disable=list(disable) if disable else None
-        )
-        return _ConfiguredTokenizer(backend=backend, cfg=tkcfg, stopwords=stop)
-    elif backend_name == "fastbert":
+    if backend_name == "fastbert":
         return FastBertTokenizer()
     return SimpleTokenizer(config=tkcfg, stopwords=stop)
 
@@ -136,9 +124,4 @@ def __getattr__(name: str):
     if name == "SimpleTokenizer":
         from .simple_tokenizer import SimpleTokenizer
         return SimpleTokenizer
-    if name == "SpacyTokenizer":
-        from .spacy_tokenizer import SpacyTokenizer
-        return SpacyTokenizer
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-

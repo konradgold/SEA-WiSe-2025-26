@@ -76,15 +76,15 @@ class BlockIO:
         arr = array("I")
         arr.frombytes(payload)
         return term, arr
-    
+
 class TermDictionaryIO():
     # BE aware of magic header when reading/writing!
     #
-    # structure [uint32][bytes][uint32][uint32] -> [5][b'apple'][12345][678]
+    # structure [uint32][bytes][uint64][uint64] -> [5][b'apple'][12345][678]
     # [uint32] length of term in bytes
     # [bytes] term encoded in utf-8
-    # [uint32] disk offset of posting list in posting_list.bin
-    # [uint32] length of posting list in bytes
+    # [uint64] disk offset of posting list in posting_list.bin
+    # [uint64] length of posting list in bytes
     #
     # BE aware of magic header when reading/writing!
     def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
@@ -99,8 +99,8 @@ class TermDictionaryIO():
 
         header_index_binary = cfg.HEADER_INDEX_FILE.encode("utf-8")
         if rewrite:
-             index_file = open(index_path, "w+b")
-             index_file.write(header_index_binary)
+            index_file = open(index_path, "w+b")
+            index_file.write(header_index_binary)
         else:
             index_file = open(index_path, "rb")
             self._check_magic_header(index_file, header_index_binary)
@@ -110,14 +110,14 @@ class TermDictionaryIO():
         magic_version = file.read(len(expected_header))
         if magic_version != expected_header:
             raise ValueError("Bad magic/version")
-        
+
     def write(self, term: str, disk_offset: int, posting_length: int) -> None:
         term = term.encode("utf-8")
         self.index_file.write(struct.pack("<I", len(term)))
         self.index_file.write(term)
 
-        self.index_file.write(struct.pack("<I", disk_offset))      
-        self.index_file.write(struct.pack("<I", posting_length))
+        self.index_file.write(struct.pack("<Q", disk_offset))
+        self.index_file.write(struct.pack("<Q", posting_length))
 
     def read(self) -> Dict[str, Tuple[int, int]]:
         term_dict: Dict[str, Tuple[int, int]] = {}
@@ -127,15 +127,15 @@ class TermDictionaryIO():
                 break
             term_dict[term] = (disk_offset, length)
         return term_dict
-    
+
     def read_line(self) -> Tuple[str, Tuple[int, int]]:
         lb = self.index_file.read(4)
         if not lb:
             return None, (0, 0)
         (term_len,) = struct.unpack("<I", lb)
         term = self.index_file.read(term_len).decode("utf-8")
-        (disk_offset,) = struct.unpack("<I", self.index_file.read(4))
-        (length,) = struct.unpack("<I", self.index_file.read(4))
+        (disk_offset,) = struct.unpack("<Q", self.index_file.read(8))
+        (length,) = struct.unpack("<Q", self.index_file.read(8))
         return term, (disk_offset, length)
 
     def close(self):
