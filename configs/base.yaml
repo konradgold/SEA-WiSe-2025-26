@@ -1,13 +1,11 @@
 TOKENIZER:
   MIN_LEN: 2
-  BACKEND: "fastbert"  # options: "simple", "spacy", "fastbert"
+  BACKEND: "fastbert"  # options: "simple", "fastbert"
   LOWERCASE: true
   ASCII_FOLD: false
   REMOVE_STOPWORDS: true
   STEM: false
   NUMBER_NORMALIZE: false
-  SPACY_MODEL: "blank"
-  SPACY_DISABLE: null
   NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 100000
   FLUSH_EVERY: 1000

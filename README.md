@@ -53,8 +53,7 @@ Create the inverted index:
 uv run python -m sea.index.tokenizer_job
 ```
 - Tokenizer configuration is controlled via the base.yaml variables:
-  - `TOKENIZER_BACKEND` = `simple` (default) or `spacy`
-  - `SPACY_MODEL` = name of spaCy model or `blank`
+  - `TOKENIZER_BACKEND` = `simple` (default)
   - The tokenizer scans documents with keys matching `D*` and writes postings under `token:{token}`.
 - Ingesting and tokenizing 10000 documents is <110MB
 
