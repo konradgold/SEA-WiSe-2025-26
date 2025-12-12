@@ -110,7 +110,10 @@ class TestQueryEngine(unittest.TestCase):
         self.assertIsInstance(root_operator.children[0], ANDOperator)
         self.assertIsInstance(root_operator.children[1], TermOperator)
 
-
+    def test_multiple_term_with_or(self):
+        engine = QueryParser(CFG)
+        root_operator = engine.process_phrase2query("wish or expect or your or consider or charity or goal or will or purchase or albert or relationship or want or you or what or do")
+        self.assertIsInstance(root_operator, ANDOperator)
 
 
 if __name__ == '__main__':

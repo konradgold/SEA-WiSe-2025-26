@@ -1,6 +1,6 @@
 TOKENIZER:
   MIN_LEN: 2
-  BACKEND: "simple"  # options: "simple", "spacy"
+  BACKEND: "fastbert"  # options: "simple", "spacy", "fastbert"
   LOWERCASE: true
   ASCII_FOLD: false
   REMOVE_STOPWORDS: true
@@ -11,12 +11,14 @@ TOKENIZER:
   NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
   SCAN_COUNT: 100000
   FLUSH_EVERY: 1000
-  STORE_POSITIONS: true
+  STORE_POSITIONS: false
   STORE_TOKENS: false
 
 REDIS_HOST: "localhost"
 REDIS_PORT: 6379
 DOCUMENTS: "data/msmarco-docs.tsv"
+DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
+INDEX_INTERVAL: 50
 DATA_PATH: "data/"
 BLOCK_PATH: "data/blocks/"
 HEADER_BLOCK_FILE: "SEAB\x01"
@@ -31,10 +33,19 @@ REDIS_PROD:
 
 SEARCH:
   MAX_RESULTS: 10
+  IDF: 8000
+  EXPAND_QUERIES: false
+  RANKING: "bm25" # options: "tfidf", "bm25", none
+  NUM_DOCS: 100000
+  VERBOSE_OUTPUT: true
+
+BM25:
+  K1: 1.5
+  B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 1000
-  BATCH_SIZE: 100
+  NUM_DOCUMENTS: 100000
+  BATCH_SIZE: 10000
 
 PERF_RUNNER:
   MODE: "ingest" # "ingest" or "query"
@@ -55,3 +66,9 @@ STORAGE:
   KEEP_DOCUMENTS: false
   LOAD_DOCUMENTS: false
 
+SPLADE:
+  MODEL_ID: "naver/splade-cocondenser-ensembledistil"
+  DEVICE: "cuda:0"  # options: "cpu", "cuda:0", etc.
+  THRESHOLD: 0.01
+  CACHE_DIR: "cache/splade"
+  CAP_EXPANSION: 10

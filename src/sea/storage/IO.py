@@ -2,8 +2,9 @@ from array import array
 import collections
 import os
 import struct
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 from sea.utils.config import Config
+
 class BlockIO:
     # BE aware of magic header when reading/writing!
     #
@@ -24,10 +25,12 @@ class BlockIO:
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self):
-        cfg = Config(load=True)
+    def __init__(self, cfg: Optional[Config] = None):
+        if cfg is None:
+            cfg = Config(load=True)
         self.magic_header_binary = cfg.HEADER_BLOCK_FILE.encode("utf-8")
         self.block_path = cfg.BLOCK_PATH
+        self.store_positions = cfg.TOKENIZER.STORE_POSITIONS
     
     def write_block(self, block_id: str, index: Dict[str, array]):
         path = self._get_block_path(block_id)
@@ -43,7 +46,6 @@ class BlockIO:
                 tb = term.encode("utf-8")
                 out.write(struct.pack("<I", len(tb)))
                 out.write(tb)
-
                 out.write(struct.pack("<I", len(arr)))
                 out.write(arr.tobytes())
 
@@ -55,16 +57,24 @@ class BlockIO:
         if magic_version != self.magic_header_binary:
             raise ValueError("Bad magic/version")
         
-    def read_line(self, file) -> Tuple[str, array]:
+    def read_line(self, file) -> Optional[Tuple[str, array]]:
+    # if not self.store_positions array includes only the term frequency
         lb = file.read(4)
         if not lb:
             return None, None
         (term_len,) = struct.unpack("<I", lb)
         term = file.read(term_len).decode("utf-8")
-        (count,) = struct.unpack("<I", file.read(4))
-        buf = file.read(count * 4)
+
+        cb = file.read(4)
+        if len(cb) != 4:
+            raise EOFError(f"{getattr(file, 'name','<file>')}: truncated count")
+        (count,) = struct.unpack("<I", cb)
+
+        payload = file.read(count * 4)
+        if len(payload) != count * 4:
+            raise EOFError(f"{getattr(file, 'name','<file>')}: truncated payload")
         arr = array("I")
-        arr.frombytes(buf)  # uint32 little-endian
+        arr.frombytes(payload)
         return term, arr
 
 class TermDictionaryIO():
@@ -77,12 +87,13 @@ class TermDictionaryIO():
     # [uint64] length of posting list in bytes
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False):
+    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
         self.rewrite = rewrite
-        self.index_file = self._open_file(rewrite)
+        if cfg is None:
+            cfg = Config(load=True)
+        self.index_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool):
-        cfg = Config(load=True)
+    def _open_file(self, rewrite: bool, cfg: Config):
 
         index_path = os.path.join(cfg.DATA_PATH, "term_dictionary.bin")
 
@@ -148,12 +159,13 @@ class PostingListIO():
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False):
+    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
             self.rewrite = rewrite
-            self.posting_file = self._open_file(rewrite)
+            if cfg is None:
+                cfg = Config(load=True)
+            self.posting_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool):
-        cfg = Config(load=True)
+    def _open_file(self, rewrite: bool, cfg: Config):
 
         posting_path = os.path.join(cfg.DATA_PATH, "posting_list.bin")
 
@@ -202,12 +214,13 @@ class DocDictonaryIO():
     # [uint32] token count (number of tokens in the document)
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False):
+    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
         self.rewrite = rewrite
-        self.doc_dict_file = self._open_file(rewrite)
+        if cfg is None:
+            cfg = Config(load=True)
+        self.doc_dict_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool):
-        cfg = Config(load=True)
+    def _open_file(self, rewrite: bool, cfg: Config):
 
         doc_dict_path = os.path.join(cfg.DATA_PATH, "doc_dictionary.bin")
         header_doc_dict_binary = cfg.HEADER_DOC_DICT_FILE.encode("utf-8")
