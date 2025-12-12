@@ -45,14 +45,6 @@ INGESTION:
   NUM_DOCUMENTS: 100000
   BATCH_SIZE: 10000
 
-PERF_RUNNER:
-  MODE: "ingest" # "ingest" or "query"
-  DOCUMENTS_PATH: "data/msmarco-docs.tsv"
-  BATCH_SIZE: 400
-  ITERATIONS: 100
-  CLEANUP: true
-  QUERIES_PATH: "queries/sample_queries.txt"
-
 QUERY:
   MAX_PHRASE_LEN: 5
 

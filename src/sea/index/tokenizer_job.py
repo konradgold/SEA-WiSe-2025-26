@@ -4,7 +4,6 @@ import json
 import logging
 import multiprocessing as mp
 from sea.index.tokenization import get_tokenizer
-from sea.perf.simple_perf import perf_indicator
 from sea.storage.interface import LocalStorage, get_storage
 from sea.utils.config import Config
 from collections import Counter, defaultdict
@@ -131,7 +130,6 @@ def process_batch(db, pipe, batch_keys, cfg, pool, local_tokenizer):
     return len(tokenized)
 
 
-@perf_indicator("tokenize_redis_content", "docs")
 def main():
     load_dotenv()
     cfg = Config(load=True)
@@ -172,7 +170,6 @@ def main():
 
     print(f"[tokenize_redis_content] Documents processed: {num_docs_processed}")
     return None, num_docs_processed
-
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 import sys
 from sea.index.tokenization import get_tokenizer
-from sea.perf.simple_perf import perf_indicator
 from sea.query.parser import QueryParser
 from sea.storage.interface import get_storage
 from sea.utils.config import Config
@@ -11,7 +10,6 @@ import time
 from sea.ranking import RankersRegistry
 
 
-@perf_indicator("search", "queries")
 def search_documents(ranker, query, splade_encoder, max_output_result=10, tokenizer=None):
     # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
     cfg = Config(load=True)
