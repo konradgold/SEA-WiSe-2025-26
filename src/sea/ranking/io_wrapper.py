@@ -151,9 +151,11 @@ class RankerAdapter(abc.ABC):
 
 
 class TFIDF(RankerAdapter):
-    
+
     def process_posting_list(self, pl: array) -> dict[int, list[int]]:
         pos_list = pl.tolist()
+        if not pos_list:
+            return {}
         len_pl = pos_list.pop(0)
         assert len_pl == len(pos_list)
         posting_dict = {}
@@ -165,9 +167,11 @@ class TFIDF(RankerAdapter):
 
 
 class BM25(RankerAdapter):     
-    
+
     def process_posting_list(self, pl: array) -> dict[int, tuple[int, int]]:
         pos_list = pl.tolist()
+        if not pos_list:
+            return {}
         len_pl = pos_list.pop(0)
         assert len_pl == len(pos_list)
         posting_dict = {}

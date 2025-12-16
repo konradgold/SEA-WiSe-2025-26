@@ -13,6 +13,8 @@ dependencies = [
     "polars>=1.35.2",
     "numpy>=1.26",
     "tqdm>=4.66",
+    "tensorflow>=2.15,<3",
+    "tensorflow-ranking>=0.5.5",
 ]
 
 [dependency-groups]
