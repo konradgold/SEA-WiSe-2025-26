@@ -65,6 +65,9 @@ def main() -> None:
     args = ap.parse_args()
 
     cfg = Config(load=True)
+    # Silence verbose output from the retriever during training to keep console clean
+    cfg.SEARCH.VERBOSE_OUTPUT = False
+
     queries = load_queries_map(args.queries)
     qrels = load_qrels_map(args.qrels)
 
@@ -100,6 +103,7 @@ def main() -> None:
             list_size=list_size,
             seed=int(args.seed),
             max_queries=max_train,
+            description="Training data",
         )
 
     def val_gen():
@@ -113,9 +117,8 @@ def main() -> None:
             list_size=list_size,
             seed=int(args.seed) + 1,
             max_queries=max_val,
+            description="Validation data",
         )
-
-    import tensorflow as tf
 
     train_ds = _tf_dataset_from_generator(
         train_gen, list_size=list_size, num_features=num_features, batch_size=int(args.batch_size)
@@ -152,5 +155,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

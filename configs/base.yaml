@@ -28,7 +28,7 @@ SEARCH:
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
   AVG_DOC_LEN: 100.0
-  VERBOSE_OUTPUT: true
+  VERBOSE_OUTPUT: false
 
 BM25:
   K1: 1.5

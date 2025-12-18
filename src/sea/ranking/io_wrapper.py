@@ -123,13 +123,17 @@ class RankerAdapter(abc.ABC):
         # Return in original order
         documents_output = [all_results[i] for i in row_numbers]
 
-        elapsed = (perf_counter() - t0) * 1000
-        print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
+        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+            elapsed = (perf_counter() - t0) * 1000
+            print(
+                f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)"
+            )
 
         return documents_output
 
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
-        print(f"Reading {len(ranked_results)} documents from disk...")
+        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+            print(f"Reading {len(ranked_results)} documents from disk...")
         row_numbers = [doc_line for doc_line, _ in ranked_results]
         ranked_results.sort(key=lambda x: x[0])
         documents_output = self._get_lines(row_numbers)
@@ -183,7 +187,10 @@ class BM25(RankerAdapter):
             tfs.append(pos_list[i+1])
             i += 2 # Assuming that positions are not stored
         if len(doc_ids) > self.cut:
-            print(f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}.")
+            if self.cfg.SEARCH.VERBOSE_OUTPUT:
+                print(
+                    f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}."
+                )
             return {}
         for doc_id, tf in zip(doc_ids, tfs):
             doc_len = self.storage_manager.getDocMetadataEntry(doc_id)[1]

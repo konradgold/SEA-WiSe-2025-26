@@ -38,6 +38,13 @@ def compile_tfr_model(model, *, learning_rate: float = 1e-3):
     """
     import tensorflow as tf
     import tensorflow_ranking as tfr
+    import sys
+
+    # Use legacy tensorflow optimizer for M1 Mac
+    if sys.platform == "darwin":
+        optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
+    else:
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
 
     loss = tfr.keras.losses.PairwiseLogisticLoss()
     metrics = [
@@ -45,12 +52,8 @@ def compile_tfr_model(model, *, learning_rate: float = 1e-3):
         tfr.keras.metrics.NDCGMetric(name="ndcg@10", topn=10),
     ]
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
+        optimizer=optimizer,
         loss=loss,
         metrics=metrics,
     )
     return model
-
-
-
-

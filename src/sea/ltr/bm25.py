@@ -53,8 +53,33 @@ class BM25Retriever:
             return docs
         return docs[:topn]
 
+    def retrieve_ids(self, query: str, *, topn: int) -> list[tuple[int, float]]:
+        """Returns only (doc_id, score) tuples without reading document content from disk."""
+        tokens = self.tokenizer.tokenize(query)
+        if not tokens:
+            return []
+
+        # Reach into the RankerAdapter to prepare tokens and call rank() directly
+        token_list = self.ranker._prepare_tokens(tokens)
+        if not token_list:
+            return []
+
+        # Use the underlying BM25Ranking.rank method which returns (id, score) pairs
+        # We need to temporarily set max_results on the inner ranker
+        inner_ranker = self.ranker.ranker
+        old_max = inner_ranker.max_results
+        inner_ranker.max_results = topn
+        try:
+            results = inner_ranker.rank(token_list)
+        finally:
+            inner_ranker.max_results = old_max
+
+        return results
+
+    def hydrate_docs(self, id_score_pairs: list[tuple[int, float]]) -> list[Document]:
+        """Reads document content from disk for a specific set of IDs."""
+        return self.ranker._read_documents(id_score_pairs)
+
     def retrieve_many(self, queries: Iterable[tuple[int, str]], *, topn: int):
         for qid, qtext in queries:
             yield qid, self.retrieve(qtext, topn=topn)
-
-

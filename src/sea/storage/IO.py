@@ -225,8 +225,8 @@ class DocDictonaryIO():
         doc_dict_path = os.path.join(cfg.DATA_PATH, "doc_dictionary.bin")
         header_doc_dict_binary = cfg.HEADER_DOC_DICT_FILE.encode("utf-8")
         if rewrite:
-             doc_dict_file = open(doc_dict_path, "w+b")
-             doc_dict_file.write(header_doc_dict_binary)
+            doc_dict_file = open(doc_dict_path, "w+b")
+            doc_dict_file.write(header_doc_dict_binary)
         else:
             doc_dict_file = open(doc_dict_path, "rb")
             self._check_magic_header(doc_dict_file, header_doc_dict_binary)
@@ -236,19 +236,25 @@ class DocDictonaryIO():
         magic_version = file.read(len(expected_header))
         if magic_version != expected_header:
             raise ValueError("Bad magic/version")
-        
+
     def write_metadata(self, metadata: Dict[int, Tuple[str, int]]):
+        import tqdm
+
         if self.rewrite:
-            for doc_id, meta in metadata.items():
+            print(
+                f"Writing {len(metadata):,} metadata entries to {self.doc_dict_file.name}..."
+            )
+            for doc_id, meta in tqdm.tqdm(metadata.items(), desc="Writing DocDict"):
                 original_id = meta[0].encode("utf-8")
                 token_count = meta[1]
                 self.doc_dict_file.write(struct.pack("<I", doc_id))
                 self.doc_dict_file.write(struct.pack("<I", len(original_id)))
                 self.doc_dict_file.write(original_id)
                 self.doc_dict_file.write(struct.pack("<I", token_count))
+            self.doc_dict_file.flush()
         else:
             raise RuntimeError("DocDictonaryIO opened in read-only mode (rewrite=False); cannot write. Set rewrite=True to enable writing.")
-    
+
     def read(self) -> Dict[int, Tuple[str, int]]:
         metadata: Dict[int, Tuple[str, int]] = {}
         while True:

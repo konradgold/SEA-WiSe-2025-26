@@ -9,13 +9,21 @@ class StorageManager:
 
     # if rewrite is True, files are opened in write mode (existing files will be overwritten)
     # if rewrite is False, files are opened in read mode
-    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
+    def __init__(
+        self,
+        rewrite: bool = False,
+        cfg: Optional[Config] = None,
+        rewrite_doc_dict: bool = None,
+    ):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
         self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg)
         self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg)
-        self.DocDictionaryIO = DocDictonaryIO(rewrite=rewrite, cfg=cfg)
+
+        # Only rewrite doc dict if explicitly requested or if rewrite is True and not explicitly disabled
+        do_rewrite_doc = rewrite if rewrite_doc_dict is None else rewrite_doc_dict
+        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg)
 
         self.termDictionary: Dict[str, Tuple[int, int]] = {}
         self.docMetadata: Dict[int, Tuple[str, int]] = {}
@@ -34,7 +42,7 @@ class StorageManager:
         if not self.termDictionary:
             self.termDictionary = self.termDictionaryIO.read()
         return self.termDictionary
-    
+
     def getDocMetadata(self) -> Dict[int, Tuple[str, int]]:
         if not self.docMetadata:
             self.docMetadata = self.DocDictionaryIO.read()
@@ -45,7 +53,7 @@ class StorageManager:
         if disk_offset == -1:
             return array("I")  # empty posting list
         return self.postingListIO.read(disk_offset, length)
-    
+
     def getDocMetadataEntry(self, doc_id: int) -> Tuple[str, int]:
         return self.getDocMetadata().get(doc_id, ("", 0))
 

@@ -24,12 +24,11 @@ class Ingestion:
     def __init__(self, document_path:str):
         self.document_path = document_path
 
-
     def rss_mb(self, PROC):
         return PROC.memory_info().rss / (1024**2)
 
     def ingest(self, num_documents: int = 1000, batch_size: int = 500):
-        #TODO: adjust batch size based on L1 cache size of CPU
+        # TODO: adjust batch size based on L1 cache size of CPU
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
 
@@ -39,7 +38,7 @@ class Ingestion:
         max_workers = cfg.TOKENIZER.NUM_WORKERS
         if cfg.TOKENIZER.NUM_WORKERS == 0:
             max_workers = cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) - 2
-        #TODO build proper switch for different platforms
+        # TODO build proper switch for different platforms
         mp_ctx = mp.get_context("spawn")   # "fork" on Linux/WSL; keep "spawn" on macOS/Windows
         counter = SimpleNamespace(value = 0)
 
@@ -81,7 +80,7 @@ class Ingestion:
                     if fut is None:
                         break
                     pending.add(fut)
-                
+
                 while pending:
                     fut = next(as_completed(pending))
                     pending.remove(fut)
@@ -94,9 +93,12 @@ class Ingestion:
                     new_fut = submit_next(ex)
                     if new_fut is not None:
                         pending.add(new_fut)      
-                self._write_metadata_to_disk(metadata)
+
+            print(f"Writing metadata for {len(metadata):,} documents to disk...")
+            self._write_metadata_to_disk(metadata)
+            print("Metadata writing complete.")
             return max_workers, timings
-    
+
     def _write_metadata_to_disk(self, metadata: Dict[int, list[str]]):
         doc_dict_io = DocDictonaryIO(rewrite=True)
         doc_dict_io.write_metadata(metadata)

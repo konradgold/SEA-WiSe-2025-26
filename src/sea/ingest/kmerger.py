@@ -15,7 +15,9 @@ class KMerger():
     def __init__(self, block_path: str):
         self.block_path = block_path
         self.blockIO = BlockIO()
-        self.storageManager = StorageManager(rewrite=True)
+        # FIX: Explicitly disable doc_dictionary rewrite to prevent truncation of metadata
+        # written during the ingestion phase.
+        self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=False)
 
     def merge_blocks(self):
         start = perf_counter()
@@ -24,8 +26,6 @@ class KMerger():
             file_names = os.listdir(self.block_path)
             print(f"Merging {len(file_names)} blocks from {self.block_path}...")
             file_paths = [os.path.join(self.block_path, f) for f in file_names]
-
-            
 
             for term, posting_list in self._merge_sorted_files(file_paths):
                 self.storageManager.write_term_posting_list(term, posting_list)

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Iterable, Iterator, Optional
 
 import numpy as np
+import tqdm
 
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.candidates import CandidateDoc
@@ -29,8 +30,9 @@ def _sample_list_for_query(
     *,
     qid: int,
     query: str,
-    docs: list[Document],
+    id_results: list[tuple[int, float]],
     positives: set[str],
+    retriever: BM25Retriever,
     fe: FeatureExtractor,
     list_size: int,
     seed: int,
@@ -39,28 +41,50 @@ def _sample_list_for_query(
     if list_size < 2:
         raise ValueError("list_size must be >= 2")
 
-    # Identify candidates and positives within retrieved set
-    pos_docs = [d for d in docs if d.doc_id in positives]
-    if not pos_docs:
+    # Find which of the top-N IDs are in the positive set
+    # MS MARCO docids in qrels are strings (e.g. 'D1234'),
+    # but the ranker returns internal integer IDs.
+    # We need to map internal IDs to original IDs to check against positives.
+
+    # Efficiently find all docids for the retrieved set
+    id_map = {}  # internal_id -> original_id
+    for int_id, score in id_results:
+        orig_id, _len = retriever.ranker.storage_manager.getDocMetadataEntry(int_id)
+        id_map[int_id] = orig_id
+
+    pos_int_ids = [int_id for int_id, orig_id in id_map.items() if orig_id in positives]
+    if not pos_int_ids:
         return None
 
     # Pick one positive (deterministic-ish but seedable)
     rng = random.Random((seed * 1_000_003) ^ qid)
-    pos = rng.choice(pos_docs)
+    pos_id = rng.choice(pos_int_ids)
 
-    neg_docs = [d for d in docs if d.doc_id not in positives]
-    if not neg_docs:
+    neg_int_ids = [
+        int_id for int_id, orig_id in id_map.items() if orig_id not in positives
+    ]
+    if not neg_int_ids:
         return None
 
-    pool = neg_docs[: max(1, min(hard_pool_topk, len(neg_docs)))]
+    pool = neg_int_ids[: max(1, min(hard_pool_topk, len(neg_int_ids)))]
     num_neg = list_size - 1
     negs = [rng.choice(pool) for _ in range(num_neg)]
 
-    # Build list: (pos first) + negatives
-    chosen = [pos] + negs
+    # Build list of (id, score) pairs to hydrate
+    # We retrieve the score from id_results for each chosen ID
+    score_map = dict(id_results)
+    chosen_pairs = [(pos_id, score_map[pos_id])] + [
+        (nid, score_map[nid]) for nid in negs
+    ]
+
+    # Hydrate ONLY the chosen docs from disk
+    docs = retriever.hydrate_docs(chosen_pairs)
+    if len(docs) != list_size:
+        return None
+
     labels = np.zeros((list_size,), dtype=np.float32)
     labels[0] = 1.0
-    features = fe.extract_many(query, chosen).astype(np.float32, copy=False)
+    features = fe.extract_many(query, docs).astype(np.float32, copy=False)
     return ListwiseSample(qid=qid, features=features, labels=labels)
 
 
@@ -75,33 +99,60 @@ def iter_listwise_samples(
     list_size: int,
     seed: int,
     max_queries: Optional[int] = None,
+    description: str = "Generating samples",
 ) -> Iterator[ListwiseSample]:
     """
     Streams listwise samples by:
-      qid -> BM25 top-N docs -> pick 1 pos + (list_size-1) negatives -> features+labels
+      qid -> BM25 top-N doc IDs (Fast) -> sample 1 pos + negatives -> hydrate docs (Slow, but minimized) -> features+labels
     """
     n = 0
-    for qid in qids:
+    yielded = 0
+
+    # Wrap with tqdm for progress feedback
+    pbar = tqdm.tqdm(qids, desc=description, total=max_queries if max_queries else None)
+
+    for qid in pbar:
         if max_queries is not None and n >= max_queries:
             break
         query = queries.get(qid)
         positives = qrels.get(qid)
         if query is None or not positives:
             continue
-        docs = retriever.retrieve(query, topn=candidate_topn)
+
+        # 1. Get ONLY IDs first (Fast)
+        id_results = retriever.retrieve_ids(query, topn=candidate_topn)
+        if not id_results:
+            continue
+
+        n += 1
+
+        # 2. Sample and hydrate (Minimize disk I/O)
         sample = _sample_list_for_query(
             qid=qid,
             query=query,
-            docs=docs,
+            id_results=id_results,
             positives=positives,
+            retriever=retriever,
             fe=fe,
             list_size=list_size,
             seed=seed,
         )
         if sample is None:
             continue
+
+        yielded += 1
+        if n % 5 == 0:
+            pbar.set_postfix({"hits": yielded, "recall": f"{yielded/n:.1%}"})
         yield sample
-        n += 1
+
+    if yielded == 0:
+        print(f"\nWARNING: Zero samples were generated from {n} queries.")
+        print(
+            "This usually means the positive document for these queries was not in the top-N BM25 results."
+        )
+        print(
+            "Check if you have ingested the full MS MARCO dataset or if candidate_topn is too low."
+        )
 
 
 def iter_candidate_docs_from_cache(
@@ -125,7 +176,3 @@ def iter_candidate_docs_from_cache(
         cands = candidates.get(qid, [])
         docs = [doc_lookup(c.docid, c.bm25) for c in cands]
         yield qid, q, docs
-
-
-
-
