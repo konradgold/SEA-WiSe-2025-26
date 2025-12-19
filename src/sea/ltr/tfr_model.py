@@ -50,6 +50,7 @@ def compile_tfr_model(model, *, learning_rate: float = 1e-3):
     metrics = [
         tfr.keras.metrics.MRRMetric(name="mrr@10", topn=10),
         tfr.keras.metrics.NDCGMetric(name="ndcg@10", topn=10),
+        tfr.keras.metrics.RecallMetric(name="recall@10", topn=10),
     ]
     model.compile(
         optimizer=optimizer,

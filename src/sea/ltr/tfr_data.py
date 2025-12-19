@@ -68,22 +68,30 @@ def _sample_list_for_query(
 
     pool = neg_int_ids[: max(1, min(hard_pool_topk, len(neg_int_ids)))]
     num_neg = list_size - 1
-    negs = [rng.choice(pool) for _ in range(num_neg)]
+
+    # Sample unique negatives if possible, otherwise allow duplicates if pool is too small
+    if len(pool) >= num_neg:
+        negs = rng.sample(pool, num_neg)
+    else:
+        negs = [rng.choice(pool) for _ in range(num_neg)]
 
     # Build list of (id, score) pairs to hydrate
-    # We retrieve the score from id_results for each chosen ID
+    # We shuffle the list so the positive document isn't always at index 0
     score_map = dict(id_results)
     chosen_pairs = [(pos_id, score_map[pos_id])] + [
         (nid, score_map[nid]) for nid in negs
     ]
+    rng.shuffle(chosen_pairs)
 
-    # Hydrate ONLY the chosen docs from disk
+    # Hydrate the chosen docs from disk
     docs = retriever.hydrate_docs(chosen_pairs)
     if len(docs) != list_size:
         return None
 
-    labels = np.zeros((list_size,), dtype=np.float32)
-    labels[0] = 1.0
+    # Labels: 1.0 for the positive doc, 0.0 for others
+    labels = np.array(
+        [1.0 if p[0] == pos_id else 0.0 for p in chosen_pairs], dtype=np.float32
+    )
     features = fe.extract_many(query, docs).astype(np.float32, copy=False)
     return ListwiseSample(qid=qid, features=features, labels=labels)
 
