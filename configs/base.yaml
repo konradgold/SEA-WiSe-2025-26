@@ -1,21 +1,15 @@
 TOKENIZER:
   MIN_LEN: 2
-  BACKEND: "fastbert"  # options: "simple", "spacy", "fastbert"
+  BACKEND: "simple"
   LOWERCASE: true
   ASCII_FOLD: false
   REMOVE_STOPWORDS: true
   STEM: false
   NUMBER_NORMALIZE: false
-  SPACY_MODEL: "blank"
-  SPACY_DISABLE: null
   NUM_WORKERS: 0 # set to 0 to use os.cpu_count()
-  SCAN_COUNT: 100000
-  FLUSH_EVERY: 1000
   STORE_POSITIONS: false
   STORE_TOKENS: false
 
-REDIS_HOST: "localhost"
-REDIS_PORT: 6379
 DOCUMENTS: "data/msmarco-docs.tsv"
 DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
 INDEX_INTERVAL: 50
@@ -26,17 +20,14 @@ HEADER_INDEX_FILE: "SEAI\x01"
 HEADER_POSTING_FILE: "SEAP\x01"
 HEADER_DOC_DICT_FILE: "SEAD\x01"
 LOG_PATH: "data/log.txt"
-REDIS_PROD: 
-  HOST: "seenar.cloud.sci.hpi.de"
-  PORT: 6379
-  USE: false
 
 SEARCH:
   MAX_RESULTS: 10
-  IDF: 8000
+  POSTINGS_CUT: 8000 # limits number of postings read per term
   EXPAND_QUERIES: false
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
+  AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: true
 
 BM25:
@@ -47,24 +38,8 @@ INGESTION:
   NUM_DOCUMENTS: 100000
   BATCH_SIZE: 10000
 
-PERF_RUNNER:
-  MODE: "ingest" # "ingest" or "query"
-  DOCUMENTS_PATH: "data/msmarco-docs.tsv"
-  BATCH_SIZE: 400
-  ITERATIONS: 100
-  CLEANUP: true
-  QUERIES_PATH: "queries/sample_queries.txt"
-
 QUERY:
   MAX_PHRASE_LEN: 5
-
-STORAGE:
-  TYPE: "filesystem" # options: "redis"
-  CURSOR_SIZE: 10
-  PATH_DOCS: "data/storage_docs.json"
-  PATH_TOKENS: "data/storage_tokens.json"
-  KEEP_DOCUMENTS: false
-  LOAD_DOCUMENTS: false
 
 SPLADE:
   MODEL_ID: "naver/splade-cocondenser-ensembledistil"
