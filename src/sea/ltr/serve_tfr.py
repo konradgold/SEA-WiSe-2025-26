@@ -30,17 +30,31 @@ class TFRReranker:
         model = tf.keras.models.load_model(str(model_path), compile=False)
         return cls(cfg=cfg, retriever=retriever, fe=fe, model=model)
 
-    def rerank(self, query: str, *, candidate_topn: int = 200, topk: int = 10) -> list[Document]:
+    def rerank(self, query: str, *, candidate_topn: int = 100, topk: int = 10) -> list[Document]:
         docs = self.retriever.retrieve(query, topn=candidate_topn)
         if not docs:
             return []
+
+        # Input shape is (None, list_size, num_features)
+        expected_list_size = self.model.input_shape[1]
+        num_features = self.model.input_shape[2]
+
         X = self.fe.extract_many(query, docs)
-        scores = self.model.predict(X[None, :, :], verbose=0)[0]
-        order = np.argsort(-scores)
+        num_docs = X.shape[0]
+
+        X_padded = np.zeros((1, expected_list_size, num_features), dtype=np.float32)
+        use_count = min(num_docs, expected_list_size)
+        X_padded[0, :use_count, :] = X[:use_count, :]
+
+        scores = self.model.predict(X_padded, verbose=0)[0]
+        actual_scores = scores[:num_docs]
+        order = np.argsort(-actual_scores)
 
         reranked = []
         for i in order[:topk]:
+            if i >= len(docs):
+                continue
             d = docs[int(i)]
-            d.score = float(scores[int(i)])
+            d.score = float(actual_scores[int(i)])
             reranked.append(d)
         return reranked

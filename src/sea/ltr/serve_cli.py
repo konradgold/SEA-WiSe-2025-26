@@ -9,7 +9,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Serve-time reranking: BM25 -> features -> TF-Ranking model -> top-10.")
     ap.add_argument("--model-path", type=str, required=True)
     ap.add_argument("--query", type=str, required=True)
-    ap.add_argument("--candidate-topn", type=int, default=200)
+    ap.add_argument("--candidate-topn", type=int, default=100)
     ap.add_argument("--topk", type=int, default=10)
     args = ap.parse_args()
 

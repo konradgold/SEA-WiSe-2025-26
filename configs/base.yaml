@@ -23,7 +23,7 @@ LOG_PATH: "data/log.txt"
 
 SEARCH:
   MAX_RESULTS: 10
-  POSTINGS_CUT: 20000 # 8000 # limits number of postings read per term
+  POSTINGS_CUT: 100000 # limits number of postings read per term
   EXPAND_QUERIES: false
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
@@ -57,7 +57,7 @@ LTR:
   VAL_CACHE: "data/val_cache_5k.npz"
   CANDIDATE_TOPN: 200
   LIST_SIZE: 100
-  EPOCHS: 40
+  EPOCHS: 1
   BATCH_SIZE: 1024
   LEARNING_RATE: 0.001
   SCHEDULER:
