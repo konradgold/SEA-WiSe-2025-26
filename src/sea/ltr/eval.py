@@ -42,9 +42,8 @@ def evaluate_split(
         if not docs:
             continue
 
-        # Baseline and reranking both operate on the same candidate set.
-        X = fe.extract_many(query, docs)  # [N, F]
-        scores = model.predict(X[None, :, :], verbose=0)[0]  # [N]
+        X = fe.extract_many(query, docs)
+        scores = model.predict(X[None, :, :], verbose=0)[0]
         order = np.argsort(-scores)
         reranked = [docs[i].doc_id for i in order[:k]]
 
@@ -102,12 +101,12 @@ def main() -> None:
     ap.add_argument("--queries", type=str, required=True)
     ap.add_argument("--qrels", type=str, required=True)
     ap.add_argument("--split-dir", type=str, required=True)
-    ap.add_argument("--model-path", type=str, required=True, help="Path to saved Keras model (model.keras).")
+    ap.add_argument("--model-path", type=str, required=True)
     ap.add_argument("--candidate-topn", type=int, default=200)
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--max-queries", type=int, default=0, help="0 means no limit.")
     ap.add_argument("--split", type=str, default="val", choices=["train", "val", "test"])
-    ap.add_argument("--out", type=str, default="", help="Optional JSON output path.")
+    ap.add_argument("--out", type=str, default="")
     args = ap.parse_args()
 
     cfg = Config(load=True)
@@ -166,7 +165,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-

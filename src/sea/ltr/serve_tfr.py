@@ -34,8 +34,8 @@ class TFRReranker:
         docs = self.retriever.retrieve(query, topn=candidate_topn)
         if not docs:
             return []
-        X = self.fe.extract_many(query, docs)  # [N, F]
-        scores = self.model.predict(X[None, :, :], verbose=0)[0]  # [N]
+        X = self.fe.extract_many(query, docs)
+        scores = self.model.predict(X[None, :, :], verbose=0)[0]
         order = np.argsort(-scores)
 
         reranked = []
@@ -44,7 +44,3 @@ class TFRReranker:
             d.score = float(scores[int(i)])
             reranked.append(d)
         return reranked
-
-
-
-

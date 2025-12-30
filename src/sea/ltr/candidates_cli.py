@@ -17,17 +17,12 @@ from sea.ltr.candidates import (
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Precompute BM25 top-N candidates for a set of query ids.")
-    ap.add_argument("--queries", type=str, required=True, help="Path to queries TSV (qid\\ttext).")
-    ap.add_argument("--qrels", type=str, required=True, help="Path to qrels file (qid 0 docid rel).")
-    ap.add_argument("--qids", type=str, required=True, help="Path to file with one qid per line.")
+    ap.add_argument("--queries", type=str, required=True)
+    ap.add_argument("--qrels", type=str, required=True)
+    ap.add_argument("--qids", type=str, required=True)
     ap.add_argument("--topn", type=int, default=200)
-    ap.add_argument("--out", type=str, required=True, help="Output JSONL file for candidates.")
-    ap.add_argument(
-        "--metrics-out",
-        type=str,
-        default="",
-        help="Optional path to write candidate recall diagnostics as JSON.",
-    )
+    ap.add_argument("--out", type=str, required=True)
+    ap.add_argument("--metrics-out", type=str, default="")
     args = ap.parse_args()
 
     queries = load_queries_map(args.queries)
@@ -39,11 +34,9 @@ def main() -> None:
         retriever=retriever, qids=qids, queries=queries, topn=args.topn
     )
     write_candidates_jsonl(candidates, args.out)
-    print(f"Wrote candidates to {args.out} (queries={len(candidates)}, topn={args.topn})")
 
-    metrics = compute_candidate_recall(candidates=candidates, qrels=qrels)
-    print(f"Candidate recall@{args.topn}: {metrics}")
     if args.metrics_out:
+        metrics = compute_candidate_recall(candidates=candidates, qrels=qrels)
         p = Path(args.metrics_out)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
@@ -52,5 +45,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

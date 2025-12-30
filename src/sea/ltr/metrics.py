@@ -29,7 +29,7 @@ def ndcg_at_k(ranked_docids: list[str], relevant: set[str], k: int = 10) -> floa
         return s
 
     dcg_val = dcg(ranked_docids)
-    # ideal DCG: all relevant docs first (binary gains)
+    # ideal DCG: all relevant docs first
     ideal_hits = min(k, len(relevant))
     if ideal_hits == 0:
         return 0.0
@@ -40,7 +40,3 @@ def ndcg_at_k(ranked_docids: list[str], relevant: set[str], k: int = 10) -> floa
 def mean(values: Iterable[float]) -> float:
     vals = list(values)
     return sum(vals) / len(vals) if vals else 0.0
-
-
-
-

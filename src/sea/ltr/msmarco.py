@@ -15,19 +15,14 @@ class Qrel:
 
 
 def iter_msmarco_doc_queries(path: str | Path) -> Iterable[tuple[int, str]]:
-    """
-    MS MARCO doc train queries file in this repo is TSV:
-        qid \\t query_text
-    """
     p = Path(path)
-    with p.open("r", encoding="utf-8", errors="replace") as f:
+    with p.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.rstrip("\n")
             if not line:
                 continue
             parts = line.split("\t", maxsplit=1)
             if len(parts) != 2:
-                # Skip malformed lines rather than crashing the whole pipeline.
                 continue
             qid_s, query = parts
             try:
@@ -38,14 +33,8 @@ def iter_msmarco_doc_queries(path: str | Path) -> Iterable[tuple[int, str]]:
 
 
 def iter_msmarco_doc_qrels(path: str | Path) -> Iterable[Qrel]:
-    """
-    MS MARCO qrels are typically in TREC format:
-        qid 0 docid rel
-
-    In this repo's `data/msmarco-doctrain-qrels.tsv`, the separator is whitespace.
-    """
     p = Path(path)
-    with p.open("r", encoding="utf-8", errors="replace") as f:
+    with p.open("r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -53,7 +42,7 @@ def iter_msmarco_doc_qrels(path: str | Path) -> Iterable[Qrel]:
             parts = line.split()
             if len(parts) < 4:
                 continue
-            qid_s, _unused, docid, rel_s = parts[:4]
+            qid_s, _, docid, rel_s = parts[:4]
             try:
                 qid = int(qid_s)
                 rel = int(rel_s)
@@ -109,17 +98,12 @@ def make_query_split(
             f"Split too small: n={n}, train={n_train}, val={n_val}, test={n_test}"
         )
 
-    train = qids_u[:n_train]
-    val = qids_u[n_train : n_train + n_val]
-    test = qids_u[n_train + n_val :]
-
-    # Sanity
-    if len(set(train) & set(val)) or len(set(train) & set(test)) or len(set(val) & set(test)):
-        raise AssertionError("Query split overlap detected")
-    if len(train) + len(val) + len(test) != n:
-        raise AssertionError("Query split does not partition all qids")
-
-    return QuerySplit(train=train, val=val, test=test, seed=seed)
+    return QuerySplit(
+        train=qids_u[:n_train],
+        val=qids_u[n_train : n_train + n_val],
+        test=qids_u[n_train + n_val :],
+        seed=seed,
+    )
 
 
 def persist_query_split(
@@ -133,7 +117,3 @@ def persist_query_split(
     (out / "val_qids.txt").write_text("\n".join(map(str, split.val)) + "\n", encoding="utf-8")
     (out / "test_qids.txt").write_text("\n".join(map(str, split.test)) + "\n", encoding="utf-8")
     (out / "split_meta.json").write_text(split.to_json() + "\n", encoding="utf-8")
-
-
-
-

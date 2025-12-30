@@ -44,7 +44,7 @@ def sample_hard_negatives(
     if not negs:
         return []
 
-    # Candidates are already in BM25 rank order from retrieval; take top-k for hard pool.
+    # Candidates are in BM25 rank order from retrieval, take top-k for hard negatives.
     pool = negs[: max(1, min(hard_pool_topk, len(negs)))]
 
     samples: list[PairSample] = []
@@ -84,7 +84,3 @@ def iter_pair_samples(
             seed=seed,
             hard_pool_topk=hard_pool_topk,
         )
-
-
-
-

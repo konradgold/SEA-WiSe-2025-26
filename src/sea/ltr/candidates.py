@@ -44,8 +44,6 @@ def compute_candidate_recall(
     qrels: dict[int, set[str]],
 ) -> dict[str, float]:
     """
-    Diagnostics: how often BM25 top-N contains a judged positive.
-
     Returns:
       - query_count: number of queries evaluated
       - recall_at_n: fraction of queries with >=1 positive in candidates
@@ -113,7 +111,3 @@ def read_candidates_jsonl(path: str | Path) -> dict[int, list[CandidateDoc]]:
             qid = int(rec["qid"])
             out[qid] = [CandidateDoc(**c) for c in rec["candidates"]]
     return out
-
-
-
-

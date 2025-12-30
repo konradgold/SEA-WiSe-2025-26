@@ -13,41 +13,31 @@ from sea.storage.manager import StorageManager
 from sea.utils.config import Config
 
 
-def _num_docs(cfg: Config) -> int:
-    # Mirror `sea.ranking.ranking.NUM_DOCS` fallback.
-    return int(cfg.SEARCH.NUM_DOCS) if cfg.SEARCH.NUM_DOCS is not None else 3_300_000
-
-
 @dataclass(frozen=True)
 class FeatureSpec:
-    """
-    Defines the numeric feature vector order.
-
-    Keep this stable across training and serving.
-    """
-
     names: list[str]
 
 
-DEFAULT_FEATURES = FeatureSpec(
-    names=[
-        "bm25_score",
-        "query_len",
-        "query_uniq_len",
-        "title_len",
-        "body_len",
-        "title_overlap_cnt",
-        "body_overlap_cnt",
-        "body_overlap_ratio",
-        "idf_body_overlap_sum",
-        "idf_title_overlap_sum",
-    ]
-)
+def get_default_features(cfg: Optional[Config] = None) -> FeatureSpec:
+    if cfg and hasattr(cfg, "LTR") and hasattr(cfg.LTR, "FEATURES"):
+        return FeatureSpec(names=list(cfg.LTR.FEATURES))
+    return FeatureSpec(
+        names=[
+            "bm25_score",
+            "query_len",
+            "query_uniq_len",
+            "title_len",
+            "body_len",
+            "title_overlap_cnt",
+            "body_overlap_cnt",
+            "body_overlap_ratio",
+            "idf_body_overlap_sum",
+            "idf_title_overlap_sum",
+        ]
+    )
 
 
 class _LRUCache:
-    """Tiny LRU for tokenized docs to avoid re-tokenizing during reranking."""
-
     def __init__(self, max_size: int = 10_000):
         self.max_size = max_size
         self._data: OrderedDict[str, tuple[set[str], int, set[str], int]] = OrderedDict()
@@ -73,11 +63,15 @@ class FeatureExtractor:
     tokenizer: TokenizerAbstract
     storage: StorageManager
     posting_cut: int
-    features: FeatureSpec = DEFAULT_FEATURES
+    features: FeatureSpec
     cache_max_docs: int = 10_000
 
     def __post_init__(self) -> None:
-        self._N = float(_num_docs(self.cfg))
+        self._N = (
+            float(self.cfg.SEARCH.NUM_DOCS)
+            if self.cfg.SEARCH.NUM_DOCS is not None
+            else 3_300_000.0
+        )
         self._cache = _LRUCache(max_size=self.cache_max_docs)
 
     @classmethod
@@ -87,17 +81,15 @@ class FeatureExtractor:
         storage = StorageManager(rewrite=False, cfg=cfg)
         storage.init_all()
         posting_cut = int(cfg.SEARCH.POSTINGS_CUT) if cfg.SEARCH.POSTINGS_CUT is not None else 100
+        features = get_default_features(cfg)
         return cls(
             cfg=cfg,
             tokenizer=tokenizer,
             storage=storage,
             posting_cut=posting_cut,
+            features=features,
             cache_max_docs=cache_max_docs,
         )
-
-    @staticmethod
-    def _safe_text(s: Optional[str]) -> str:
-        return s if isinstance(s, str) else ""
 
     def _doc_tokens(self, doc: Document) -> tuple[set[str], int, set[str], int]:
         """
@@ -110,45 +102,46 @@ class FeatureExtractor:
         if cached is not None:
             return cached
 
-        title = self._safe_text(doc.title)
-        body = self._safe_text(doc.content)
+        title = doc.title if isinstance(doc.title, str) else ""
+        body = doc.content if isinstance(doc.content, str) else ""
 
         title_tokens = self.tokenizer.tokenize(title)
         body_tokens = self.tokenizer.tokenize(body)
 
-        title_set = set(title_tokens)
-        body_set = set(body_tokens)
-        value = (title_set, len(title_tokens), body_set, len(body_tokens))
+        value = (
+            set(title_tokens),
+            len(title_tokens),
+            set(body_tokens),
+            len(body_tokens),
+        )
         self._cache.put(key, value)
         return value
 
     def _idf(self, token: str) -> float:
         """
         BM25-style IDF using index df from the posting list.
-
-        We mimic the repo's BM25 posting cut behavior: if df exceeds cut, treat the term
-        as non-contributing (idf=0) to keep feature behavior aligned with retrieval.
         """
         pl = self.storage.getPostingList(token)
-        if not pl:
+        if not pl or len(pl) < 1:
             return 0.0
-        # Posting list is [len][docid][tf]...
-        if len(pl) < 1:
-            return 0.0
+
         len_pl = int(pl[0])
-        if len_pl <= 0:
-            return 0.0
-        # Without positions: remaining values are (docid, tf) pairs.
         df = max(0, len_pl // 2)
-        if df <= 0:
+        if df <= 0 or df > self.posting_cut:
             return 0.0
-        if df > self.posting_cut:
-            return 0.0
-        # Same formula as `sea.ranking.ranking.BM25Ranking`:
+
         return float(math.log((self._N - df + 0.5) / (df + 0.5) + 1.0))
 
     def extract(self, query: str, doc: Document) -> np.ndarray:
         q_tokens = self.tokenizer.tokenize(query)
+        return self._extract_with_tokens(q_tokens, doc)
+
+    def _extract_with_tokens(
+        self,
+        q_tokens: list[str],
+        doc: Document,
+        q_idfs: Optional[dict[str, float]] = None,
+    ) -> np.ndarray:
         q_len = len(q_tokens)
         q_set = set(q_tokens)
         q_uniq = len(q_set)
@@ -162,7 +155,7 @@ class FeatureExtractor:
         idf_body = 0.0
         idf_title = 0.0
         for t in q_set:
-            idf = self._idf(t)
+            idf = q_idfs[t] if q_idfs is not None else self._idf(t)
             if idf <= 0.0:
                 continue
             if t in body_set:
@@ -183,12 +176,13 @@ class FeatureExtractor:
             "idf_title_overlap_sum": float(idf_title),
         }
 
-        x = np.array([values[name] for name in self.features.names], dtype=np.float32)
-        return x
+        return np.array(
+            [values[name] for name in self.features.names], dtype=np.float32
+        )
 
     def extract_many(self, query: str, docs: Iterable[Document]) -> np.ndarray:
-        return np.stack([self.extract(query, d) for d in docs], axis=0)
-
-
-
-
+        q_tokens = self.tokenizer.tokenize(query)
+        q_idfs = {t: self._idf(t) for t in set(q_tokens)}
+        return np.stack(
+            [self._extract_with_tokens(q_tokens, d, q_idfs) for d in docs], axis=0
+        )
