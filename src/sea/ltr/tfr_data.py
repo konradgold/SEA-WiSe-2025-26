@@ -41,22 +41,15 @@ def _sample_list_for_query(
     if list_size < 2:
         raise ValueError("list_size must be >= 2")
 
-    # Find which of the top-N IDs are in the positive set
-    # MS MARCO docids in qrels are strings (e.g. 'D1234'),
-    # but the ranker returns internal integer IDs.
-    # We need to map internal IDs to original IDs to check against positives.
-
-    # Efficiently find all docids for the retrieved set
-    id_map = {}  # internal_id -> original_id
-    for int_id, score in id_results:
-        orig_id, _len = retriever.ranker.storage_manager.getDocMetadataEntry(int_id)
+    id_map = {}
+    for int_id, _ in id_results:
+        orig_id, _ = retriever.ranker.storage_manager.getDocMetadataEntry(int_id)
         id_map[int_id] = orig_id
 
     pos_int_ids = [int_id for int_id, orig_id in id_map.items() if orig_id in positives]
     if not pos_int_ids:
         return None
 
-    # Pick one positive (deterministic-ish but seedable)
     rng = random.Random((seed * 1_000_003) ^ qid)
     pos_id = rng.choice(pos_int_ids)
 
@@ -69,7 +62,6 @@ def _sample_list_for_query(
     pool = neg_int_ids[: max(1, min(hard_pool_topk, len(neg_int_ids)))]
     num_neg = list_size - 1
 
-    # Sample unique negatives if possible, otherwise allow duplicates if pool is too small
     if len(pool) >= num_neg:
         negs = rng.sample(pool, num_neg)
     else:
@@ -83,12 +75,11 @@ def _sample_list_for_query(
     ]
     rng.shuffle(chosen_pairs)
 
-    # Hydrate the chosen docs from disk
     docs = retriever.hydrate_docs(chosen_pairs)
     if len(docs) != list_size:
         return None
 
-    # Labels: 1.0 for the positive doc, 0.0 for others
+    # 1.0 for the positive doc, 0.0 for others
     labels = np.array(
         [1.0 if p[0] == pos_id else 0.0 for p in chosen_pairs], dtype=np.float32
     )
@@ -116,8 +107,13 @@ def iter_listwise_samples(
     n = 0
     yielded = 0
 
-    # Wrap with tqdm for progress feedback
-    pbar = tqdm.tqdm(qids, desc=description, total=max_queries if max_queries else None)
+    total_to_check = len(qids) if isinstance(qids, list) else None
+    if max_queries is not None:
+        total_to_check = (
+            min(total_to_check, max_queries) if total_to_check else max_queries
+        )
+
+    pbar = tqdm.tqdm(qids, desc=description, total=total_to_check)
 
     for qid in pbar:
         if max_queries is not None and n >= max_queries:
@@ -127,14 +123,11 @@ def iter_listwise_samples(
         if query is None or not positives:
             continue
 
-        # 1. Get ONLY IDs first (Fast)
         id_results = retriever.retrieve_ids(query, topn=candidate_topn)
         if not id_results:
             continue
 
         n += 1
-
-        # 2. Sample and hydrate (Minimize disk I/O)
         sample = _sample_list_for_query(
             qid=qid,
             query=query,
@@ -153,15 +146,6 @@ def iter_listwise_samples(
             pbar.set_postfix({"hits": yielded, "recall": f"{yielded/n:.1%}"})
         yield sample
 
-    if yielded == 0:
-        print(f"\nWARNING: Zero samples were generated from {n} queries.")
-        print(
-            "This usually means the positive document for these queries was not in the top-N BM25 results."
-        )
-        print(
-            "Check if you have ingested the full MS MARCO dataset or if candidate_topn is too low."
-        )
-
 
 def iter_candidate_docs_from_cache(
     *,
@@ -170,13 +154,6 @@ def iter_candidate_docs_from_cache(
     candidates: dict[int, list[CandidateDoc]],
     doc_lookup: callable,
 ) -> Iterator[tuple[int, str, list[Document]]]:
-    """
-    Placeholder for an optional future optimization:
-    If you cache candidate docids and can map docid -> Document fields quickly,
-    you can avoid re-running BM25 for each epoch.
-
-    Current implementation uses BM25Retriever directly instead.
-    """
     for qid in qids:
         q = queries.get(qid)
         if q is None:
