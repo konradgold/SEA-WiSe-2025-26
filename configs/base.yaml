@@ -23,7 +23,7 @@ LOG_PATH: "data/log.txt"
 
 SEARCH:
   MAX_RESULTS: 10
-  POSTINGS_CUT: 8000 # limits number of postings read per term
+  POSTINGS_CUT: 20000 # 8000 # limits number of postings read per term
   EXPAND_QUERIES: false
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
@@ -35,7 +35,7 @@ BM25:
   B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 100000
+  NUM_DOCUMENTS: 3200000
   BATCH_SIZE: 10000
 
 QUERY:
@@ -47,3 +47,41 @@ SPLADE:
   THRESHOLD: 0.01
   CACHE_DIR: "cache/splade"
   CAP_EXPANSION: 10
+
+LTR:
+  DATA_DIR: "data"
+  QUERIES: "data/msmarco-doctrain-queries.tsv"
+  QRELS: "data/msmarco-doctrain-qrels.tsv"
+  SPLIT_DIR: "data/splits"
+  TRAIN_CACHE: "data/train_cache_20k.npz"
+  VAL_CACHE: "data/val_cache_5k.npz"
+  CANDIDATE_TOPN: 200
+  LIST_SIZE: 100
+  EPOCHS: 40
+  BATCH_SIZE: 1024
+  LEARNING_RATE: 0.001
+  SCHEDULER:
+    TYPE: "cosine"  # options: "none", "exponential", "cosine"
+    DECAY_STEPS: 10000
+    DECAY_RATE: 0.9
+    ALPHA: 0.1
+  SEED: 42
+  MODEL:
+    HIDDEN_UNITS: [512, 256, 128]
+    DROPOUT: 0.1
+    USE_ATTENTION: true
+  WANDB:
+    PROJECT: "SEA-WiSe-2025-26"
+    GROUP: "reranker"
+    LOG_MODEL: true
+  FEATURES:
+    - "bm25_score"
+    - "query_len"
+    - "query_uniq_len"
+    - "title_len"
+    - "body_len"
+    - "title_overlap_cnt"
+    - "body_overlap_cnt"
+    - "body_overlap_ratio"
+    - "idf_body_overlap_sum"
+    - "idf_title_overlap_sum"
