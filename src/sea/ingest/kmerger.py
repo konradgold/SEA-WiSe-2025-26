@@ -15,8 +15,6 @@ class KMerger():
     def __init__(self, block_path: str):
         self.block_path = block_path
         self.blockIO = BlockIO()
-        # FIX: Explicitly disable doc_dictionary rewrite to prevent truncation of metadata
-        # written during the ingestion phase.
         self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=False)
 
     def merge_blocks(self):

@@ -8,7 +8,7 @@ import enum
 
 from sea.index.tokenization import get_tokenizer
 from sea.storage.IO import BlockIO
-from sea.utils.config import Config  # config is loaded once per worker process in init_worker
+from sea.utils.config import Config
 
 class Columns(enum.Enum):
     doc_id = "doc_id"
