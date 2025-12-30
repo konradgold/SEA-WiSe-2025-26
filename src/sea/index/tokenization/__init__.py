@@ -43,13 +43,6 @@ class TokenizerConfig:
     number_normalize: bool = True
 
 
-def _default_backend(cfg) -> str:
-    env_backend = cfg.TOKENIZER.BACKEND
-    if env_backend:
-        return env_backend.lower()
-    return "simple"
-
-
 def _env_bool(value: Any, default: bool) -> bool:
     if value is None:
         return default
@@ -83,27 +76,10 @@ def simple_stem(token: str) -> str:
     return s
 
 
-class _ConfiguredTokenizer(TokenizerAbstract):
-    def __init__(
-        self, backend: TokenizerAbstract, cfg: TokenizerConfig, stopwords: set[str]
-    ):
-        self.backend = backend
-        self.cfg = cfg
-        self.stopwords = stopwords
-
-    def tokenize(self, text: str) -> list[str]:
-        if not text:
-            return []
-        raw_tokens = self.backend.tokenize(text)
-        return self._post_process_tokens(raw_tokens, self.cfg, self.stopwords)
-
-
 def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     from .simple_tokenizer import SimpleTokenizer
-    from .fast_tokenizer import FastBertTokenizer
 
     config_yaml = cfg if cfg is not None else Config()
-    backend_name = _default_backend(config_yaml)
     tkcfg = TokenizerConfig(
         lowercase=_env_bool(config_yaml.TOKENIZER.LOWERCASE, True),
         ascii_fold=_env_bool(config_yaml.TOKENIZER.ASCII_FOLD, True),
@@ -114,8 +90,6 @@ def get_tokenizer(cfg: Optional[Config]=None) -> TokenizerAbstract:
     )
     stop = get_default_stopwords() if tkcfg.remove_stopwords else set()
 
-    if backend_name == "fastbert":
-        return FastBertTokenizer()
     return SimpleTokenizer(config=tkcfg, stopwords=stop)
 
 

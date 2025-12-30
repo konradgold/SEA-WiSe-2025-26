@@ -1,6 +1,6 @@
 TOKENIZER:
   MIN_LEN: 2
-  BACKEND: "simple"  # options: "simple", "fastbert"
+  BACKEND: "simple"
   LOWERCASE: true
   ASCII_FOLD: false
   REMOVE_STOPWORDS: true
