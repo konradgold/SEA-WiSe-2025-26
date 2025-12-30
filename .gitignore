@@ -219,3 +219,5 @@ notebooks/*.txt
 .DS_Store
 
 cache
+wandb
+artifacts/*
