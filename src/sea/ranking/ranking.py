@@ -56,7 +56,7 @@ class BM25Ranking(Ranking):
     
     def __init__(self, cfg):
         super().__init__(cfg)
-        self.avg_doc_len = getattr(cfg.SEARCH, "AVG_DOC_LEN", 100.0)
+        self.avg_doc_len = cfg.SEARCH.AVG_DOC_LEN if cfg.SEARCH.AVG_DOC_LEN is not None else 100.0
         self.k1 = cfg.BM25.K1 if cfg.BM25.K1 is not None else 1.5
         self.b = cfg.BM25.B if cfg.BM25.B is not None else 0.75
 

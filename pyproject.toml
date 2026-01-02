@@ -5,15 +5,14 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "python-dotenv>=0.9.9",
     "pandas>=2.3.3",
-    "redis>=6.4.0",
-    "spacy>=3.8.7",
     "pyyaml>=6.0.3",
     "prompt-toolkit>=3.0.52",
     "transformers>=4.57.3",
     "torch>=2.9.1",
     "polars>=1.35.2",
+    "numpy>=1.26",
+    "tqdm>=4.66",
 ]
 
 [dependency-groups]
@@ -22,11 +21,6 @@ dev = [
     "ipywidgets>=8.1.7",
     "pytest>=7.1",
     "pytest-cov>=7.0.0"
-]
-
-[project.optional-dependencies]
-apple = [
-  "spacy[apple]>=3.8.7; sys_platform == 'darwin'"
 ]
 
 [tool.setuptools]
