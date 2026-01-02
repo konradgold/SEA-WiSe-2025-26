@@ -1,5 +1,4 @@
 import unittest
-import tensorflow as tf
 import numpy as np
 from sea.ltr.tfr_model import TFRConfig, build_tfr_scoring_model, compile_tfr_model
 
