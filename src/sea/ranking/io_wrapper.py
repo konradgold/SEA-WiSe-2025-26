@@ -123,27 +123,38 @@ class RankerAdapter(abc.ABC):
         # Return in original order
         documents_output = [all_results[i] for i in row_numbers]
 
-        elapsed = (perf_counter() - t0) * 1000
-        print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
+        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+            elapsed = (perf_counter() - t0) * 1000
+            print(
+                f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)"
+            )
 
         return documents_output
 
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
-        print(f"Reading {len(ranked_results)} documents from disk...")
-        row_numbers = [doc_line for doc_line, _ in ranked_results]
-        ranked_results.sort(key=lambda x: x[0])
+        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+            print(f"Reading {len(ranked_results)} documents from disk...")
+
+        # Save original order and map internal ID to score
+        id_to_score = {doc_id: score for doc_id, score in ranked_results}
+        row_numbers = [doc_id for doc_id, _ in ranked_results]
+
+        # Fetch documents from disk (this might return them in different order depending on implementation,
+        # but RankerAdapter._get_lines is supposed to return them in the order of row_numbers)
         documents_output = self._get_lines(row_numbers)
 
-        documents_output = [
+        hydrated_docs = [
             Document(
-                doc_id=row[0], link=row[1], title=row[2], content=row[3],
-                score=ranked_results[i][1]
+                doc_id=row[0],
+                link=row[1],
+                title=row[2],
+                content=row[3],
+                score=id_to_score[row_num],
             )
-            for i, row in enumerate(documents_output)
+            for row_num, row in zip(row_numbers, documents_output)
         ]
 
-        doc_outputs = sorted(documents_output, reverse=True)
-        return doc_outputs
+        return hydrated_docs
 
     @abc.abstractmethod
     def process_posting_list(self, pl: array) -> dict:
@@ -151,9 +162,11 @@ class RankerAdapter(abc.ABC):
 
 
 class TFIDF(RankerAdapter):
-    
+
     def process_posting_list(self, pl: array) -> dict[int, list[int]]:
         pos_list = pl.tolist()
+        if not pos_list:
+            return {}
         len_pl = pos_list.pop(0)
         assert len_pl == len(pos_list)
         posting_dict = {}
@@ -165,9 +178,11 @@ class TFIDF(RankerAdapter):
 
 
 class BM25(RankerAdapter):     
-    
+
     def process_posting_list(self, pl: array) -> dict[int, tuple[int, int]]:
         pos_list = pl.tolist()
+        if not pos_list:
+            return {}
         len_pl = pos_list.pop(0)
         assert len_pl == len(pos_list)
         posting_dict = {}
@@ -179,7 +194,10 @@ class BM25(RankerAdapter):
             tfs.append(pos_list[i+1])
             i += 2 # Assuming that positions are not stored
         if len(doc_ids) > self.cut:
-            print(f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}.")
+            if self.cfg.SEARCH.VERBOSE_OUTPUT:
+                print(
+                    f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}."
+                )
             return {}
         for doc_id, tf in zip(doc_ids, tfs):
             doc_len = self.storage_manager.getDocMetadataEntry(doc_id)[1]

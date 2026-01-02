@@ -50,3 +50,32 @@ With the next command, you are able to view the performance measurement:
 uvx snakeviz profile.pstats
 ```
 
+## Learning to Rank (LTR)
+The LTR pipeline implements a retrieve-then-rerank architecture. BM25 is used to retrieve top-N candidates, which are then re-scored by a TensorFlow-Ranking model to improve precision.
+
+### 1. Split queries
+Create deterministic splits for MS MARCO queries:
+```bash
+uv run python -m sea.ltr.split_cli --qrels data/msmarco-doctrain-qrels.tsv --out-dir data/splits
+```
+
+### 2. Pre-compute features
+Generate feature caches (`.npz`) to speed up training. This retrieves candidates and extracts features once for a given split:
+```bash
+uv run python -m sea.ltr.prepare_data --split-file data/splits/train_qids.txt --out data/train_cache.npz
+```
+
+### 3. Train the model
+Train the reranker using the pre-computed features. Training is integrated with W&B for logging:
+```bash
+uv run python -m sea.ltr.train_tfr --train-cache data/train_cache.npz --val-cache data/val_cache.npz
+```
+
+### 4. Search with reranking
+Run a query through the full pipeline (BM25 -> Feature Extraction -> Model Scoring):
+```bash
+uv run python -m sea.ltr.serve_cli --model-path artifacts/my_model/model.keras --query "apple pie recipe"
+```
+
+Configuration for LTR (features, model architecture, training params) is managed in the `LTR` section of `configs/base.yaml`.
+
