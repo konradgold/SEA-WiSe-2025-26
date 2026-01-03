@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from typing import List
 from hydra.core.config_store import ConfigStore
 from omegaconf import DictConfig
-from regex import D
 
 @dataclass
 class TokenizerConfig:
@@ -45,8 +44,8 @@ class BM25Config:
 
 @dataclass
 class IngestionConfig:
-    NUM_DOCUMENTS: int = 3200000
-    BATCH_SIZE: int = 10000
+    NUM_DOCUMENTS: int = 32000
+    BATCH_SIZE: int = 1000
 
 @dataclass
 class QueryConfig:

@@ -4,7 +4,7 @@ import os
 import struct
 from typing import Dict, Optional, Tuple
 from sea.utils.config_wrapper import Config
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 class BlockIO:
     # BE aware of magic header when reading/writing!

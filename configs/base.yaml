@@ -28,7 +28,7 @@ SEARCH:
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
   AVG_DOC_LEN: 100.0
-  VERBOSE_OUTPUT: false
+  VERBOSE_OUTPUT: true
   FIELDED:
     ACTIVE: true
     FIELDS: ["title", "body", "url"]
@@ -47,8 +47,8 @@ BM25:
   B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 3200000
-  BATCH_SIZE: 10000
+  NUM_DOCUMENTS: 32000
+  BATCH_SIZE: 1000
 
 QUERY:
   MAX_PHRASE_LEN: 5

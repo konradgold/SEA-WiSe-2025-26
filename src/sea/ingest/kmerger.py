@@ -15,7 +15,7 @@ class KMerger():
     def __init__(self, block_path: str, field: Optional[str] = None):
         self.block_path = block_path + (f"{field}/" if field is not None else "")
         self.blockIO = BlockIO(field=field)
-        self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=False, field=field)
+        self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=True, field=field)
 
     def merge_blocks(self):
         start = perf_counter()

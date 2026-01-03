@@ -11,6 +11,7 @@ import logging
 from sea.storage.IO import DocDictonaryIO
 from sea.utils.config_wrapper import Config
 from sea.utils.logger import dir_size, write_message_to_log_file
+from omegaconf import DictConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ class Ingestion:
 
         submitted = 0
 
-        self._clear_existing_blocks()
+        self._clear_existing_blocks(field)
 
         def submit_next(ex):
             nonlocal submitted
@@ -109,11 +110,12 @@ class Ingestion:
         doc_dict_io.write_metadata(metadata)
         doc_dict_io.close()
 
-    def _clear_existing_blocks(self):
+    def _clear_existing_blocks(self, field: Optional[str] = None):
         cfg = Config(load=True)
-        if os.path.exists(cfg.BLOCK_PATH):
-            for f in os.listdir(cfg.BLOCK_PATH):
-                os.remove(os.path.join(cfg.BLOCK_PATH, f))
+        block_path = cfg.BLOCK_PATH + (f"{field}/" if field else "")
+        if os.path.exists(block_path):
+            for f in os.listdir(block_path):
+                os.remove(os.path.join(block_path, f))
 
     def _merge(self, a: dict, b: dict) -> None:
         for tok, mapping in b.items():
@@ -172,8 +174,15 @@ def summarize_pipeline(total_time, num_of_workers, batch_timings: List[BatchTimi
     print(time_measurement)
     write_message_to_log_file(time_measurement)
 
+def assert_doc_structure(cfg: DictConfig) -> None:
+    os.makedirs(cfg.DATA_PATH, exist_ok=True)
+    os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
+    for field in cfg.SEARCH.FIELDED.FIELDS:
+        os.makedirs(os.path.join(cfg.BLOCK_PATH, field), exist_ok=True)
+    
 
-def main():
+
+def main() -> None:
     start = perf_counter()
     cfg = Config(load=True)
     ingestion = Ingestion(cfg.DOCUMENTS)
@@ -182,6 +191,7 @@ def main():
         fields = cfg.SEARCH.FIELDED.FIELDS
     else:
         fields = [None]
+    assert_doc_structure(cfg)
     no_of_terms = 0
     merge_timing = 0.0
     no_of_workers, ingest_timings = 0, []

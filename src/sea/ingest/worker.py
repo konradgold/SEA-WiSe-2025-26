@@ -14,14 +14,14 @@ from sea.utils.config_wrapper import Config
 
 class Columns(enum.Enum):
     doc_id = "doc_id"
-    link   = "link"
+    url   = "url"
     title  = "title"
     body   = "body"
 
 class Document:
-    def __init__(self, doc_id: str, link: str, title: str, body: str):
+    def __init__(self, doc_id: str, url: str, title: str, body: str):
         self.doc_id = doc_id
-        self.link = link
+        self.url = url
         self.title = title
         self.body = body
     
@@ -32,8 +32,8 @@ class Document:
     def __getitem__(self, key: Optional[Columns]):
         if key == Columns.doc_id:
             return self.doc_id
-        elif key == Columns.link:
-            return self.link
+        elif key == Columns.url:
+            return self.url
         elif key == Columns.title:
             return self.title
         elif key == Columns.body:
@@ -70,7 +70,7 @@ class Worker:
         self.field = Columns(field) if field is not None else None
 
     # public entry point used by the parent to process one batch
-    def process_batch(self, block_id: str, lines: List[Tuple[int, str]], field: Optional[str] = None) -> BatchResult:
+    def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> BatchResult:
         # build index and write shard on disk; return metadata for this batch
         t0 = perf_counter()
         print(f"[{block_id}] start")
@@ -102,7 +102,7 @@ class Worker:
                 continue
             doc = Document(
                 doc_id=parts[0],
-                link=parts[1],
+                url=parts[1],
                 title=parts[2],
                 body=parts[3],
             )
@@ -149,9 +149,9 @@ def init_worker(field: Optional[str] = None):
     store_positions = cfg.TOKENIZER.STORE_POSITIONS
     _worker = Worker(store_positions=store_positions, cfg=cfg, field = field)
 
-def process_batch(block_id: str, lines: List[Tuple[int, str]], field: Optional[str] = None) -> BatchResult:
+def process_batch(block_id: str, lines: List[Tuple[int, str]]) -> BatchResult:
     """
     Called for each batch from the parent. Uses the per-process _worker singleton.
     """
     assert _worker is not None, "Worker not initialized—did you pass initializer=init_worker?"
-    return _worker.process_batch(block_id, lines, field)
+    return _worker.process_batch(block_id, lines)

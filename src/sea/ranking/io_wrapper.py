@@ -12,14 +12,16 @@ from sea.ranking.utils import Document, RankingRegistry
 from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
 from sea.storage.manager import StorageManager
 
-def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
+def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=3_300_000):
     offsets = []
     with open(tsv_path, 'rb') as index:
         offsets.append(0)
         index.readline()
-        for i, line in tqdm.tqdm(enumerate(index, 1)):
+        for i, line in tqdm.tqdm(enumerate(index, 2)):
             if i % interval == 0:
                 offsets.append(index.tell())
+            if i >= limit:
+                break
     
     with open(index_path, 'wb') as index:
         pickle.dump(offsets, index)
@@ -28,7 +30,7 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
 
 class RankerAdapter(abc.ABC):
 
-    def __init__(self, ranker: Ranking, storage_manager: StorageManager, cfg: Optional[DictConfig] = None):
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
@@ -58,7 +60,8 @@ class RankerAdapter(abc.ABC):
             self.offsets = build_index(
                 tsv_path=cfg.DOCUMENTS,
                 interval=cfg.INDEX_INTERVAL,
-                index_path=cfg.DOCUMENT_OFFSETS
+                index_path=cfg.DOCUMENT_OFFSETS,
+                limit=cfg.INGESTION.NUM_DOCUMENTS
             )
                                         
         self.interval = cfg.INDEX_INTERVAL
@@ -89,7 +92,7 @@ class RankerAdapter(abc.ABC):
             posting_list: array | None = self.storage_managers[field].getPostingList(token)
             if posting_list is None:
                 continue
-            processed_token = self.process_posting_list(posting_list)
+            processed_token = self.process_posting_list(posting_list, field=field)
             if processed_token:
                 token_list.append(processed_token)
         return token_list
@@ -177,13 +180,13 @@ class RankerAdapter(abc.ABC):
         return hydrated_docs
 
     @abc.abstractmethod
-    def process_posting_list(self, pl: array) -> dict:
+    def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict:
         pass
 
 
 class TFIDF(RankerAdapter):
 
-    def process_posting_list(self, pl: array) -> dict[int, list[int]]:
+    def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, list[int]]:
         pos_list = pl.tolist()
         if not pos_list:
             return {}
@@ -198,7 +201,7 @@ class TFIDF(RankerAdapter):
 
 class BM25(RankerAdapter):     
 
-    def process_posting_list(self, pl: array) -> dict[int, tuple[int, int]]:
+    def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, tuple[int, int]]:
         pos_list = pl.tolist()
         if not pos_list:
             return {}
@@ -219,7 +222,7 @@ class BM25(RankerAdapter):
                 )
             return {}
         for doc_id, tf in zip(doc_ids, tfs):
-            doc_len = self.storage_manager.getDocMetadataEntry(doc_id)[1]
+            doc_len = self.storage_managers[field].getDocMetadataEntry(doc_id)[1]
             posting_dict[doc_id] = (doc_len, tf)
         return posting_dict
 
@@ -227,15 +230,13 @@ RankersRegistry = RankingRegistry()
 
 def bm25():
     cfg = Config(load=True)
-    storage_manager = StorageManager(rewrite=False, cfg=cfg)
     ranker = BM25Ranking(cfg)
-    return BM25(ranker, storage_manager, cfg=cfg)
+    return BM25(ranker, cfg=cfg)
 
 def tfidf():
     cfg = Config(load=True)
-    storage_manager = StorageManager(rewrite=False, cfg=cfg)
     ranker = TFIDFRanking(cfg)
-    return TFIDF(ranker, storage_manager, cfg=cfg)
+    return TFIDF(ranker, cfg=cfg)
 
 
 RankersRegistry.register("bm25", bm25)
