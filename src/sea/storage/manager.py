@@ -15,16 +15,17 @@ class StorageManager:
         rewrite: bool = False,
         cfg: Optional[DictConfig] = None,
         rewrite_doc_dict: Optional[bool] = None,
+        field: Optional[str] = None
     ):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
-        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg)
-        self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg)
+        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg, field=field)
+        self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg, field=field)
 
         # Only rewrite doc dict if explicitly requested or if rewrite is True and not explicitly disabled
         do_rewrite_doc = rewrite if rewrite_doc_dict is None else rewrite_doc_dict
-        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg)
+        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg, field=field)
 
         self.termDictionary: Dict[str, Tuple[int, int]] = {}
         self.docMetadata: Dict[int, Tuple[str, int]] = {}

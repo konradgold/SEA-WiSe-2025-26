@@ -26,11 +26,11 @@ class BlockIO:
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, cfg: Optional[DictConfig] = None):
+    def __init__(self, cfg: Optional[DictConfig] = None, field: Optional[str] = None):
         if cfg is None:
             cfg = Config(load=True)
         self.magic_header_binary = cfg.HEADER_BLOCK_FILE.encode("utf-8")
-        self.block_path = cfg.BLOCK_PATH
+        self.block_path = cfg.BLOCK_PATH + (f"{field}/" if field else "")
         self.store_positions = cfg.TOKENIZER.STORE_POSITIONS
     
     def write_block(self, block_id: str, index: Dict[str, array]):
@@ -88,15 +88,15 @@ class TermDictionaryIO():
     # [uint64] length of posting list in bytes
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None, field: Optional[str] = None):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
-        self.index_file = self._open_file(rewrite, cfg)
+        self.index_file = self._open_file(rewrite, cfg, field)
 
-    def _open_file(self, rewrite: bool, cfg: DictConfig):
+    def _open_file(self, rewrite: bool, cfg: DictConfig, field: Optional[str] = None):
 
-        index_path = os.path.join(cfg.DATA_PATH, "term_dictionary.bin")
+        index_path = os.path.join(cfg.DATA_PATH, f"term_dictionary_{field}.bin" if field else "term_dictionary.bin")
 
         header_index_binary = cfg.HEADER_INDEX_FILE.encode("utf-8")
         if rewrite:
@@ -160,15 +160,15 @@ class PostingListIO():
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None, field: Optional[str] = None):
             self.rewrite = rewrite
             if cfg is None:
                 cfg = Config(load=True)
-            self.posting_file = self._open_file(rewrite, cfg)
+            self.posting_file = self._open_file(rewrite, cfg, field)
 
-    def _open_file(self, rewrite: bool, cfg: DictConfig):
+    def _open_file(self, rewrite: bool, cfg: DictConfig, field: Optional[str] = None):
 
-        posting_path = os.path.join(cfg.DATA_PATH, "posting_list.bin")
+        posting_path = os.path.join(cfg.DATA_PATH, f"posting_list_{field}.bin" if field else "posting_list.bin")
 
         header_posting_binary = cfg.HEADER_POSTING_FILE.encode("utf-8")
         if rewrite:
@@ -215,15 +215,15 @@ class DocDictonaryIO():
     # [uint32] token count (number of tokens in the document)
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None, field: Optional[str] = None):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
-        self.doc_dict_file = self._open_file(rewrite, cfg)
+        self.doc_dict_file = self._open_file(rewrite, cfg, field)  
 
-    def _open_file(self, rewrite: bool, cfg: DictConfig):
+    def _open_file(self, rewrite: bool, cfg: DictConfig, field: Optional[str] = None):
 
-        doc_dict_path = os.path.join(cfg.DATA_PATH, "doc_dictionary.bin")
+        doc_dict_path = os.path.join(cfg.DATA_PATH, f"doc_dictionary_{field}.bin" if field else "doc_dictionary.bin")
         header_doc_dict_binary = cfg.HEADER_DOC_DICT_FILE.encode("utf-8")
         if rewrite:
             doc_dict_file = open(doc_dict_path, "w+b")

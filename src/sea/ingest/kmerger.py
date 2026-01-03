@@ -2,7 +2,7 @@ from array import array
 import heapq
 import os
 from time import perf_counter
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 from sea.storage.IO import BlockIO
 from sea.storage.manager import StorageManager
 
@@ -12,10 +12,10 @@ class KMerger():
     K-way merger for sorted posting lists stored on disk
     """
 
-    def __init__(self, block_path: str):
-        self.block_path = block_path
-        self.blockIO = BlockIO()
-        self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=False)
+    def __init__(self, block_path: str, field: Optional[str] = None):
+        self.block_path = block_path + (f"{field}/" if field is not None else "")
+        self.blockIO = BlockIO(field=field)
+        self.storageManager = StorageManager(rewrite=True, rewrite_doc_dict=False, field=field)
 
     def merge_blocks(self):
         start = perf_counter()

@@ -3,7 +3,7 @@ import multiprocessing as mp
 import os
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 from sea.ingest.kmerger import KMerger
 from sea.ingest.worker import  BatchTimings, init_worker, process_batch
@@ -27,7 +27,7 @@ class Ingestion:
     def rss_mb(self, PROC):
         return PROC.memory_info().rss / (1024**2)
 
-    def ingest(self, num_documents: int = 1000, batch_size: int = 500):
+    def ingest(self, num_documents: int = 1000, batch_size: int = 500, field: Optional[str] = None):
         # TODO: adjust batch size based on L1 cache size of CPU
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
@@ -39,7 +39,12 @@ class Ingestion:
         if cfg.TOKENIZER.NUM_WORKERS == 0:
             max_workers = cfg.TOKENIZER.NUM_WORKERS = (os.cpu_count() or 2) - 2
         # TODO build proper switch for different platforms
-        mp_ctx = mp.get_context("spawn")   # "fork" on Linux/WSL; keep "spawn" on macOS/Windows
+        if os.uname().sysname == "Darwin" or os.name != "posix":
+            mp_ctx = mp.get_context("spawn")
+        else:
+            mp_ctx = mp.get_context("forkserver")
+
+         # "fork" on Linux/WSL; keep "spawn" on macOS/Windows
         counter = SimpleNamespace(value = 0)
 
         submitted = 0
@@ -68,7 +73,7 @@ class Ingestion:
                 max_workers=max_workers,
                 mp_context=mp_ctx,
                 initializer=init_worker,
-                initargs=(),
+                initargs=(field,),
             ) as ex:
 
                 # prefill the queue
@@ -99,7 +104,7 @@ class Ingestion:
             print("Metadata writing complete.")
             return max_workers, timings
 
-    def _write_metadata_to_disk(self, metadata: Dict[int, list[str]]):
+    def _write_metadata_to_disk(self, metadata: Dict[int, list[str|int]]):
         doc_dict_io = DocDictonaryIO(rewrite=True)
         doc_dict_io.write_metadata(metadata)
         doc_dict_io.close()
@@ -172,10 +177,24 @@ def main():
     start = perf_counter()
     cfg = Config(load=True)
     ingestion = Ingestion(cfg.DOCUMENTS)
-    no_of_workers, ingest_timings = ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE)
 
-    merger = KMerger(cfg.BLOCK_PATH)
-    no_of_terms, merge_timing = merger.merge_blocks()
+    if cfg.SEARCH.FIELDED.ACTIVE:
+        fields = cfg.SEARCH.FIELDED.FIELDS
+    else:
+        fields = [None]
+    no_of_terms = 0
+    merge_timing = 0.0
+    no_of_workers, ingest_timings = 0, []
+    for field in fields:
+        workers, timings = ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE, field=field)
+        no_of_workers = max(no_of_workers, workers)
+        ingest_timings.extend(timings)
+        message = f"Merging fielded blocks for field '{field}'..." if field is not None else "Merging blocks..."
+        print(message)
+        merger = KMerger(cfg.BLOCK_PATH, field)
+        no_terms, timing = merger.merge_blocks()
+        no_of_terms += no_terms
+        merge_timing += timing
 
     end = perf_counter()
     total_time = end - start

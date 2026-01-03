@@ -17,6 +17,16 @@ class TokenizerConfig:
     STORE_POSITIONS: bool = False
     STORE_TOKENS: bool = False
 
+
+@dataclass
+class FIELDEDConfig:
+    ACTIVE: bool = True
+    FIELDS: List[str] = field(default_factory=lambda: ["title", "body", "url"])
+    LENGTHS: dict = field(default_factory=lambda: {
+        "title": 20.0,
+        "body": 80.0,
+        "url": 10.0
+    })
 @dataclass
 class SearchConfig:
     MAX_RESULTS: int = 10
@@ -26,6 +36,7 @@ class SearchConfig:
     NUM_DOCS: int = 100000
     AVG_DOC_LEN: float = 100.0
     VERBOSE_OUTPUT: bool = False
+    FIELDED: FIELDEDConfig = field(default_factory=FIELDEDConfig)
 
 @dataclass
 class BM25Config:

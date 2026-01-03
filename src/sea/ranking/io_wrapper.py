@@ -17,7 +17,6 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
     with open(tsv_path, 'rb') as index:
         offsets.append(0)
         index.readline()
-
         for i, line in tqdm.tqdm(enumerate(index, 1)):
             if i % interval == 0:
                 offsets.append(index.tell())
@@ -33,12 +32,24 @@ class RankerAdapter(abc.ABC):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
+        self.max_results = cfg.SEARCH.MAX_RESULTS if cfg.SEARCH.MAX_RESULTS is not None else 10
         self.cut = (
             cfg.SEARCH.POSTINGS_CUT if cfg.SEARCH.POSTINGS_CUT is not None else 100
         )
         self.cfg = cfg
-        self.storage_manager = storage_manager
-        self.storage_manager.init_all()
+        if cfg.SEARCH.FIELDED.ACTIVE:
+            self.fields = cfg.SEARCH.FIELDED.FIELDS
+        else:
+            self.fields = ["all"]
+        self.storage_managers = {}
+        for field in self.fields:
+            if field == "all":
+                field = None
+            storage_manager = StorageManager(rewrite=False, cfg=cfg, field=field)
+            storage_manager.init_all()
+            if field is None:
+                field = "all"
+            self.storage_managers[field] = storage_manager
         if os.path.exists(cfg.DOCUMENT_OFFSETS):
             with open(cfg.DOCUMENT_OFFSETS, 'rb') as index:
                 self.offsets = pickle.load(index)
@@ -49,6 +60,7 @@ class RankerAdapter(abc.ABC):
                 interval=cfg.INDEX_INTERVAL,
                 index_path=cfg.DOCUMENT_OFFSETS
             )
+                                        
         self.interval = cfg.INDEX_INTERVAL
         cpu_count = os.cpu_count()
         if cpu_count is None or cpu_count <=2:
@@ -61,16 +73,20 @@ class RankerAdapter(abc.ABC):
         return self._retrieve_and_rank(tokens)
 
     def _retrieve_and_rank(self, tokens: List[str]) -> list[Document]:
-        token_list = self._prepare_tokens(tokens)
-        if len(token_list) == 0:
-            return []
-        ranked_results = self.ranker(token_list)
-        return self._read_documents(ranked_results)
+        ranked_results: dict[int, float] = dict()
+        for field in self.fields:
+            token_list = self._prepare_tokens(tokens, field=field)
+            if len(token_list) == 0:
+                return []
+            for doc_id, score in self.ranker(token_list, field=field).items():
+                ranked_results[doc_id] = ranked_results.get(doc_id, 0.0) + score
+        results = sorted(ranked_results.items(), key=lambda item: item[1], reverse=True)[:self.max_results]
+        return self._read_documents(results)
 
-    def _prepare_tokens(self, tokens: List[str]) -> list:
+    def _prepare_tokens(self, tokens: List[str], field: str) -> list:
         token_list = []
         for token in tokens:
-            posting_list: array | None = self.storage_manager.getPostingList(token)
+            posting_list: array | None = self.storage_managers[field].getPostingList(token)
             if posting_list is None:
                 continue
             processed_token = self.process_posting_list(posting_list)

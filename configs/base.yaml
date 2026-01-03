@@ -29,6 +29,18 @@ SEARCH:
   NUM_DOCS: 100000
   AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: false
+  FIELDED:
+    ACTIVE: true
+    FIELDS: ["title", "body", "url"]
+    LENGTHS:
+      title: 20.0
+      body: 80.0
+      url: 10.0
+    WEIGHTS:
+      title: 2.0
+      body: 1.0
+      url: 1.5
+
 
 BM25:
   K1: 1.5
