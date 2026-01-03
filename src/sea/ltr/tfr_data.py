@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Optional
+from typing import Callable, Iterable, Iterator, Optional
 
 import numpy as np
 import tqdm
@@ -152,7 +152,7 @@ def iter_candidate_docs_from_cache(
     qids: Iterable[int],
     queries: dict[int, str],
     candidates: dict[int, list[CandidateDoc]],
-    doc_lookup: callable,
+    doc_lookup: Callable,
 ) -> Iterator[tuple[int, str, list[Document]]]:
     for qid in qids:
         q = queries.get(qid)

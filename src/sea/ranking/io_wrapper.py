@@ -4,7 +4,8 @@ from time import perf_counter
 from typing import List, Optional
 import pickle
 import tqdm
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from sea.ranking.utils import Document, RankingRegistry
@@ -28,7 +29,7 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl'):
 
 class RankerAdapter(abc.ABC):
 
-    def __init__(self, ranker: Ranking, storage_manager: StorageManager, cfg: Optional[Config] = None):
+    def __init__(self, ranker: Ranking, storage_manager: StorageManager, cfg: Optional[DictConfig] = None):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
@@ -49,7 +50,11 @@ class RankerAdapter(abc.ABC):
                 index_path=cfg.DOCUMENT_OFFSETS
             )
         self.interval = cfg.INDEX_INTERVAL
-        self.num_threads = os.cpu_count() - 2 if os.cpu_count() is not None and os.cpu_count() > 2 else 1
+        cpu_count = os.cpu_count()
+        if cpu_count is None or cpu_count <=2:
+            self.num_threads = 1
+        else:
+            self.num_threads = cpu_count - 2
         print(f"Using {self.num_threads} threads for document reading.")
 
     def __call__(self, tokens: list) -> list[Document]:

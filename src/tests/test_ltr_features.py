@@ -4,7 +4,7 @@ import numpy as np
 
 from sea.ltr.features import FeatureExtractor
 from sea.ranking.utils import Document
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 class TestLTRFeatures(unittest.TestCase):

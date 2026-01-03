@@ -7,12 +7,13 @@ from prompt_toolkit.history import InMemoryHistory
 from sea.index.tokenization import get_tokenizer
 from sea.query.parser import QueryParser
 from sea.ranking import RankersRegistry
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 def search_documents(
     *,
-    cfg: Config,
+    cfg: DictConfig,
     ranker,
     query: str,
     splade_encoder,

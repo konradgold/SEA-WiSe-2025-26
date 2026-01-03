@@ -2,7 +2,8 @@ from array import array
 from typing import Dict, Optional, Tuple
 
 from sea.storage.IO import DocDictonaryIO, TermDictionaryIO, PostingListIO
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 class StorageManager:
@@ -12,8 +13,8 @@ class StorageManager:
     def __init__(
         self,
         rewrite: bool = False,
-        cfg: Optional[Config] = None,
-        rewrite_doc_dict: bool = None,
+        cfg: Optional[DictConfig] = None,
+        rewrite_doc_dict: Optional[bool] = None,
     ):
         self.rewrite = rewrite
         if cfg is None:

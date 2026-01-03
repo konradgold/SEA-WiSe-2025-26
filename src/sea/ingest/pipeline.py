@@ -9,7 +9,7 @@ from sea.ingest.kmerger import KMerger
 from sea.ingest.worker import  BatchTimings, init_worker, process_batch
 import logging
 from sea.storage.IO import DocDictonaryIO
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 from sea.utils.logger import dir_size, write_message_to_log_file
 
 logging.basicConfig(level=logging.INFO)

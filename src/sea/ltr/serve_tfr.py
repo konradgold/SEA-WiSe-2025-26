@@ -1,26 +1,28 @@
 from __future__ import annotations
 
+from ast import Dict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from omegaconf import DictConfig
 
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.features import FeatureExtractor
 from sea.ranking.utils import Document
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 @dataclass
 class TFRReranker:
-    cfg: Config
+    cfg: DictConfig
     retriever: BM25Retriever
     fe: FeatureExtractor
     model: object
 
     @classmethod
-    def load(cls, *, model_path: str | Path, cfg: Optional[Config] = None) -> "TFRReranker":
+    def load(cls, *, model_path: str | Path, cfg: Optional[DictConfig] = None) -> "TFRReranker":
         cfg = cfg or Config(load=True)
         retriever = BM25Retriever.from_config(cfg)
         fe = FeatureExtractor.from_config(cfg)

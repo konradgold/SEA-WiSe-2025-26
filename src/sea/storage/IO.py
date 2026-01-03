@@ -3,7 +3,8 @@ import collections
 import os
 import struct
 from typing import Dict, Optional, Tuple
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig, OmegaConf
 
 class BlockIO:
     # BE aware of magic header when reading/writing!
@@ -25,7 +26,7 @@ class BlockIO:
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, cfg: Optional[Config] = None):
+    def __init__(self, cfg: Optional[DictConfig] = None):
         if cfg is None:
             cfg = Config(load=True)
         self.magic_header_binary = cfg.HEADER_BLOCK_FILE.encode("utf-8")
@@ -57,7 +58,7 @@ class BlockIO:
         if magic_version != self.magic_header_binary:
             raise ValueError("Bad magic/version")
         
-    def read_line(self, file) -> Optional[Tuple[str, array]]:
+    def read_line(self, file) -> Tuple[Optional[str], Optional[array]]:
     # if not self.store_positions array includes only the term frequency
         lb = file.read(4)
         if not lb:
@@ -87,13 +88,13 @@ class TermDictionaryIO():
     # [uint64] length of posting list in bytes
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
         self.index_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool, cfg: Config):
+    def _open_file(self, rewrite: bool, cfg: DictConfig):
 
         index_path = os.path.join(cfg.DATA_PATH, "term_dictionary.bin")
 
@@ -112,10 +113,10 @@ class TermDictionaryIO():
             raise ValueError("Bad magic/version")
 
     def write(self, term: str, disk_offset: int, posting_length: int) -> None:
-        term = term.encode("utf-8")
-        self.index_file.write(struct.pack("<I", len(term)))
-        self.index_file.write(term)
-
+        term_buffer = term.encode("utf-8")
+        self.index_file.write(struct.pack("<I", len(term_buffer)))
+        self.index_file.write(term_buffer)
+    
         self.index_file.write(struct.pack("<Q", disk_offset))
         self.index_file.write(struct.pack("<Q", posting_length))
 
@@ -128,7 +129,7 @@ class TermDictionaryIO():
             term_dict[term] = (disk_offset, length)
         return term_dict
 
-    def read_line(self) -> Tuple[str, Tuple[int, int]]:
+    def read_line(self) -> Tuple[Optional[str], Tuple[int, int]]:
         lb = self.index_file.read(4)
         if not lb:
             return None, (0, 0)
@@ -159,13 +160,13 @@ class PostingListIO():
     #  - 45 = position 2
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
             self.rewrite = rewrite
             if cfg is None:
                 cfg = Config(load=True)
             self.posting_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool, cfg: Config):
+    def _open_file(self, rewrite: bool, cfg: DictConfig):
 
         posting_path = os.path.join(cfg.DATA_PATH, "posting_list.bin")
 
@@ -214,13 +215,13 @@ class DocDictonaryIO():
     # [uint32] token count (number of tokens in the document)
     #
     # BE aware of magic header when reading/writing!
-    def __init__(self, rewrite: bool = False, cfg: Optional[Config] = None):
+    def __init__(self, rewrite: bool = False, cfg: Optional[DictConfig] = None):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
         self.doc_dict_file = self._open_file(rewrite, cfg)
 
-    def _open_file(self, rewrite: bool, cfg: Config):
+    def _open_file(self, rewrite: bool, cfg: DictConfig):
 
         doc_dict_path = os.path.join(cfg.DATA_PATH, "doc_dictionary.bin")
         header_doc_dict_binary = cfg.HEADER_DOC_DICT_FILE.encode("utf-8")

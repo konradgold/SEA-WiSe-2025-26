@@ -6,9 +6,12 @@ from time import perf_counter
 from typing import List, Tuple, Dict, Optional
 import enum
 
+from omegaconf import DictConfig
+
 from sea.index.tokenization import get_tokenizer
 from sea.storage.IO import BlockIO
-from sea.utils.config import Config
+from sea.utils.config import MainConfig
+from sea.utils.config_wrapper import Config
 
 class Columns(enum.Enum):
     doc_id = "doc_id"
@@ -34,7 +37,7 @@ class BatchResult:
 _worker: "Worker | None" = None
 
 class Worker:
-    def __init__(self, store_positions: bool, cfg: Optional[Config] = None):
+    def __init__(self, store_positions: bool, cfg: Optional[DictConfig] = None):
         self.store_positions = store_positions
         self.blockIO = BlockIO()
         if cfg is None:
