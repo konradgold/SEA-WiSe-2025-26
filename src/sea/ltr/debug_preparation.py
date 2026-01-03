@@ -9,6 +9,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
 from sea.storage.IO import DocDictonaryIO
+import hydra
 
 
 @hydra.main(config_path="../../../configs", config_name="debug_preparation", version_base=None)
