@@ -1,1 +1,1 @@
-from sea.ranking.io_wrapper import RankersRegistry
+from sea.ranking.io_wrapper import RankersRegistry, RankerAdapter
