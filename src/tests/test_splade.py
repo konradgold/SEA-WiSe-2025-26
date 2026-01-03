@@ -1,7 +1,5 @@
 import unittest
-
-import yaml
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 from sea.query.splade import SpladeEncoder
 
 class TestSplade(unittest.TestCase):
@@ -16,7 +14,7 @@ class TestSplade(unittest.TestCase):
     
     def test_encode_returns_dicts(self):
         """Test that encode returns two dictionaries with expected structure."""
-        sparse_dict, sparse_dict_tokens = self.encoder.encode(self.test_texts[0])
+        sparse_dict, sparse_dict_tokens = self.encoder._encode(self.test_texts[0])
         
         self.assertIsInstance(sparse_dict, dict)
         self.assertIsInstance(sparse_dict_tokens, dict)

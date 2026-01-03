@@ -3,7 +3,7 @@ import unittest
 from sea.query.operators import ANDNOTOperator, ANDOperator, OROperator, PhraseOperator, TermOperator
 from sea.query.parser import QueryParser
 from sea.query.specs import Operators
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 CFG = Config()
 

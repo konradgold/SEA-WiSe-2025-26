@@ -4,9 +4,10 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
-from sea.ranking.io_wrapper import bm25 as build_bm25_ranker
+from sea.ranking.io_wrapper import RankerAdapter, bm25 as build_bm25_ranker
 from sea.ranking.utils import Document
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 @dataclass
@@ -15,12 +16,12 @@ class BM25Retriever:
     Thin wrapper around the BM25 implementation for use in LTR pipelines for LTR candidate generation.
     """
 
-    cfg: Config
+    cfg: DictConfig
     tokenizer: TokenizerAbstract
-    ranker: object
+    ranker: RankerAdapter
 
     @classmethod
-    def from_config(cls, cfg: Config | None = None) -> "BM25Retriever":
+    def from_config(cls, cfg: DictConfig | None = None) -> "BM25Retriever":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
         ranker = build_bm25_ranker()

@@ -5,13 +5,15 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import hydra
 import numpy as np
 
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.candidates import iter_qids, load_qrels_map, load_queries_map
 from sea.ltr.features import FeatureExtractor
 from sea.ltr.metrics import mean, mrr_at_k, ndcg_at_k
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 def evaluate_split(
@@ -95,26 +97,13 @@ def evaluate_bm25_baseline(
         f"ndcg@{k}": float(mean(ndcgs)),
     }
 
+@hydra.main(config_path="../../../configs", config_name="eval_ltr", version_base=None)
+def main(cfg) -> None:
+    queries = load_queries_map(cfg.queries)
+    qrels = load_qrels_map(cfg.qrels)
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Offline evaluation: BM25 baseline vs TF-Ranking reranker.")
-    ap.add_argument("--queries", type=str, required=True)
-    ap.add_argument("--qrels", type=str, required=True)
-    ap.add_argument("--split-dir", type=str, required=True)
-    ap.add_argument("--model-path", type=str, required=True)
-    ap.add_argument("--candidate-topn", type=int, default=200)
-    ap.add_argument("--k", type=int, default=10)
-    ap.add_argument("--max-queries", type=int, default=0, help="0 means no limit.")
-    ap.add_argument("--split", type=str, default="val", choices=["train", "val", "test"])
-    ap.add_argument("--out", type=str, default="")
-    args = ap.parse_args()
-
-    cfg = Config(load=True)
-    queries = load_queries_map(args.queries)
-    qrels = load_qrels_map(args.qrels)
-
-    split_dir = Path(args.split_dir)
-    qids_path = split_dir / f"{args.split}_qids.txt"
+    split_dir = Path(cfg.split_dir)
+    qids_path = split_dir / f"{cfg.split}_qids.txt"
     qids = list(iter_qids(qids_path))
 
     retriever = BM25Retriever.from_config(cfg)
@@ -122,17 +111,17 @@ def main() -> None:
 
     import tensorflow as tf
 
-    model = tf.keras.models.load_model(args.model_path, compile=False)
+    model = tf.keras.models.load_model(cfg.model_path, compile=False)
 
-    max_q = None if args.max_queries == 0 else int(args.max_queries)
+    max_q = None if cfg.max_queries == 0 else int(cfg.max_queries)
 
     baseline = evaluate_bm25_baseline(
         qids=qids,
         queries=queries,
         qrels=qrels,
         retriever=retriever,
-        candidate_topn=int(args.candidate_topn),
-        k=int(args.k),
+        candidate_topn=int(cfg.candidate_topn),
+        k=int(cfg.k),
         max_queries=max_q,
     )
     reranker = evaluate_split(
@@ -142,26 +131,25 @@ def main() -> None:
         retriever=retriever,
         fe=fe,
         model=model,
-        candidate_topn=int(args.candidate_topn),
-        k=int(args.k),
+        candidate_topn=int(cfg.candidate_topn),
+        k=int(cfg.k),
         max_queries=max_q,
     )
 
     report = {
-        "split": args.split,
-        "candidate_topn": int(args.candidate_topn),
-        "k": int(args.k),
+        "split": cfg.split,
+        "candidate_topn": int(cfg.candidate_topn),
+        "k": int(cfg.k),
         "bm25": baseline,
         "reranker": reranker,
     }
     print(json.dumps(report, indent=2))
 
-    if args.out:
-        outp = Path(args.out)
+    if cfg.out:
+        outp = Path(cfg.out)
         outp.parent.mkdir(parents=True, exist_ok=True)
         outp.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        print(f"Wrote report to {args.out}")
-
+        print(f"Wrote report to {cfg.out}")
 
 if __name__ == "__main__":
     main()

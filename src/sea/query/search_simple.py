@@ -1,44 +1,44 @@
 import sys
 import time
+from typing import Optional
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
-
-from sea.index.tokenization import get_tokenizer
-from sea.query.parser import QueryParser
-from sea.ranking import RankersRegistry
+from yaml import Token
+from sea.index.tokenization import TokenizerAbstract, get_tokenizer
+from sea.query.splade import SpladeEncoder
+from sea.ranking.io_wrapper import bm25
 from sea.utils.config_wrapper import Config
-from omegaconf import DictConfig
 
 
 def search_documents(
     *,
-    cfg: DictConfig,
-    ranker,
+    retriever,
     query: str,
-    splade_encoder,
-    max_output_result: int,
-    tokenizer,
+    splade_encoder: Optional[SpladeEncoder],
+    tokenizer: TokenizerAbstract
 ):
-    # This assumes documents are stored with keys like 'D*' (e.g., 'D1972382') and contain JSON content
-    query_parser = QueryParser(cfg=cfg)
-    root_operator = query_parser.process_phrase2query(query, splade_encoder=splade_encoder)
-    matches, final_query = root_operator.execute(ranker, tokenizer)
-    return (sorted(matches)[:max_output_result], len(matches), final_query) if matches else (None, 0, final_query)
+    if splade_encoder is not None:
+        query = " ".join(splade_encoder.expand(query))
+
+    query_listed = tokenizer.tokenize(query)
+
+    return retriever(query_listed), query
+    
+    
+    
 
 def main():
     cfg = Config(load=True)
     history = InMemoryHistory()
     session = PromptSession(history=history)
-    max_output_result = cfg.SEARCH.MAX_RESULTS if cfg.SEARCH.MAX_RESULTS is not None else 10
+    ranker = bm25()
     splade_encoder = None
+    tokenizer = get_tokenizer(cfg)
     if cfg.SEARCH.EXPAND_QUERIES:
         from sea.query.splade import SpladeEncoder
         splade_encoder = SpladeEncoder(cfg=cfg)
 
-    tokenizer = get_tokenizer(cfg)
-    ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKING)
-    ranker = ranker_builder()
     while True:
         try:
             query = session.prompt("\nEnter your search query (or 'quit' to exit):\n> ")
@@ -50,14 +50,12 @@ def main():
         if not query:
             continue   
 
-        t0 = time.time()    
-        documents, num_matches, final_query = search_documents(
-            cfg=cfg,
-            ranker=ranker,
+        t0 = time.time()
+        documents, final_query = search_documents(
+            retriever=ranker,
             query=query,
             splade_encoder=splade_encoder,
-            max_output_result=max_output_result,
-            tokenizer=tokenizer,
+            tokenizer=tokenizer
         )
         elapsed = (time.time() - t0)*1000
         history.append_string(final_query)
@@ -66,7 +64,7 @@ def main():
             for doc in documents:
                 doc.pprint(verbose=cfg.SEARCH.VERBOSE_OUTPUT, loud=True)
 
-            print(f"\nFound {num_matches} matches in {elapsed:.2f} milliseconds.")
+            print(f"\nFound {len(documents)} matches in {elapsed:.2f} milliseconds.")
         else:
             print("\nNo matches found.")
         print(f"Query: {final_query}")
