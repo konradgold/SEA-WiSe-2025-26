@@ -24,7 +24,7 @@ LOG_PATH: "data/log.txt"
 SEARCH:
   MAX_RESULTS: 10
   POSTINGS_CUT: 100000 # limits number of postings read per term
-  EXPAND_QUERIES: false
+  EXPAND_QUERIES: true
   RANKING: "bm25" # options: "tfidf", "bm25", none
   NUM_DOCS: 100000
   AVG_DOC_LEN: 100.0
@@ -58,7 +58,7 @@ SPLADE:
   DEVICE: "cuda:0"  # options: "cpu", "cuda:0", etc.
   THRESHOLD: 0.01
   CACHE_DIR: "cache/splade"
-  CAP_EXPANSION: 10
+  CAP_EXPANSION: 2
 
 LTR:
   DATA_DIR: "data"

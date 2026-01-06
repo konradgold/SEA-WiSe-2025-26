@@ -57,7 +57,7 @@ class SpladeConfig:
     DEVICE: str = "cuda:0"
     THRESHOLD: float = 0.01
     CACHE_DIR: str = "cache/splade"
-    CAP_EXPANSION: int = 10
+    CAP_EXPANSION: int = 2
 
 @dataclass
 class SchedulerConfig:

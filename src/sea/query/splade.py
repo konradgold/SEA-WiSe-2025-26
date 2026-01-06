@@ -26,6 +26,8 @@ class SpladeEncoder:
 
     def _encode(self, text: str):
         tokens = self.tokenizer(text, return_tensors='pt').to(self.device)
+        take_top = tokens["input_ids"].shape[1] * self.cutoff
+
         output = self.model(**tokens)
         vec = torch.max(
             torch.log(
@@ -40,19 +42,19 @@ class SpladeEncoder:
             self.idx2token[idx]: round(weight, 2) for idx, weight in zip(cols, weights)
         }
         # sort so we can see most relevant tokens first
-        sparse_dict_tokens = {
-            k: v for k, v in sorted(
+        sparse_dict_tokens=  [
+            (k, v) for k, v in sorted(
                 sparse_dict_tokens.items(),
                 key=lambda item: item[1],
                 reverse=True
             )
             if v >= self.threshold
-        }
+        ][:take_top]
         return sparse_dict, sparse_dict_tokens
     
     def expand(self, text: str) -> list[str]:
         _, sparse_dict_tokens = self._encode(text)
-        tokens = set(sparse_dict_tokens.keys())
+        tokens = set(k for k, v in sparse_dict_tokens)
         input_tokens = set(self.tokenizer.tokenize(text))
         tokens -= input_tokens
         tokens = list(tokens)[:self.cutoff]
