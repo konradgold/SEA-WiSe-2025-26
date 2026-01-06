@@ -23,10 +23,10 @@ LOG_PATH: "data/log.txt"
 
 SEARCH:
   MAX_RESULTS: 10
-  POSTINGS_CUT: 100000 # limits number of postings read per term
+  POSTINGS_CUT: 1000 # limits number of postings read per term
   EXPAND_QUERIES: true
   RANKING: "bm25" # options: "tfidf", "bm25", none
-  NUM_DOCS: 100000
+  NUM_DOCS: 32000
   AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: true
   FIELDED:

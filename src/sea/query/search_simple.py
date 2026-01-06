@@ -21,8 +21,8 @@ def search_documents(
         query = " ".join(splade_encoder.expand(query))
 
     query_listed = tokenizer.tokenize(query)
-
-    return retriever(query_listed), query
+    time_start = time.perf_counter()
+    return retriever(query_listed), query, time_start
     
     
     
@@ -49,14 +49,13 @@ def main():
         if not query:
             continue   
 
-        t0 = time.time()
-        documents, final_query = search_documents(
+        documents, final_query, t0 = search_documents(
             retriever=ranker,
             query=query,
             splade_encoder=splade_encoder,
             tokenizer=tokenizer
         )
-        elapsed = (time.time() - t0)*1000
+        elapsed = (time.perf_counter() - t0)*1000
         history.append_string(final_query)
 
         if documents:
