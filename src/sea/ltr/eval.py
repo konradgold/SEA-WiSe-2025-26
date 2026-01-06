@@ -12,8 +12,6 @@ from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.candidates import iter_qids, load_qrels_map, load_queries_map
 from sea.ltr.features import FeatureExtractor
 from sea.ltr.metrics import mean, mrr_at_k, ndcg_at_k
-from sea.utils.config_wrapper import Config
-from omegaconf import DictConfig
 
 
 def evaluate_split(

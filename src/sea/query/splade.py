@@ -9,7 +9,7 @@ class SpladeEncoder:
     def __init__(self, cfg=None):
         self.cfg = cfg
         model_id = cfg.SPLADE.MODEL_ID if cfg else 'naver/splade-cocondenser-ensembledistil'
-        self.cutoff = cfg.SPLADE.CAP_EXPANSION if cfg else 5
+        self.cutoff = cfg.SPLADE.CAP_EXPANSION if cfg else 3
         cache_dir = cfg.SPLADE.CACHE_DIR if cfg else None
         self.device = DEVICE
         self.threshold = cfg.SPLADE.THRESHOLD if cfg else 0.0

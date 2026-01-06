@@ -16,7 +16,6 @@ from sea.ltr.candidates import iter_qids, load_qrels_map, load_queries_map
 from sea.ltr.features import FeatureExtractor
 from sea.ltr.tfr_data import iter_listwise_samples
 from sea.ltr.tfr_model import TFRConfig, build_tfr_scoring_model, compile_tfr_model
-from sea.utils.config_wrapper import Config
 from omegaconf import DictConfig
 
 
@@ -53,12 +52,12 @@ def _tf_dataset_from_npz(path: str, *, batch_size: int, shuffle: bool = True):
     ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="train_tfr")
+@hydra.main(version_base=None, config_path="../../configs", config_name="train_ltr")
 def main(cfg: DictConfig) -> None:
     cfg.SEARCH.VERBOSE_OUTPUT = False
 
     ap = argparse.ArgumentParser(description="Train a TensorFlow Ranking reranker on MS MARCO doc ranking data.")
-
+    # TODO: Solve using hydra?
     ap.add_argument("--no-wandb", action="store_true")
     ap.add_argument(
         "--wandb-run-name",

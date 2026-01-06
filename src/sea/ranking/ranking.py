@@ -1,5 +1,5 @@
 import abc
-from typing import List, Optional
+from typing import List
 
 import numpy
 NUM_DOCS=3_300_000

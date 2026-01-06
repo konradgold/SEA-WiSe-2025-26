@@ -4,7 +4,6 @@ from typing import Optional
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
-from yaml import Token
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
 from sea.query.splade import SpladeEncoder
 from sea.ranking.io_wrapper import bm25

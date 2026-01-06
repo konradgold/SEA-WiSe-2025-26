@@ -102,7 +102,7 @@ class LTRConfig:
     ])
 
 @dataclass
-class MainConfig(DictConfig):
+class MainConfig:
     TOKENIZER: TokenizerConfig = field(default_factory=TokenizerConfig)
     SEARCH: SearchConfig = field(default_factory=SearchConfig)
     BM25: BM25Config = field(default_factory=BM25Config)

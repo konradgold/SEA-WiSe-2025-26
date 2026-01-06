@@ -80,9 +80,11 @@ class RankerAdapter(abc.ABC):
         for field in self.fields:
             token_list = self._prepare_tokens(tokens, field=field)
             if len(token_list) == 0:
-                return []
+                continue
             for doc_id, score in self.ranker(token_list, field=field).items():
                 ranked_results[doc_id] = ranked_results.get(doc_id, 0.0) + score
+        if len(ranked_results) == 0:
+            return []
         results = sorted(ranked_results.items(), key=lambda item: item[1], reverse=True)[:self.max_results]
         return self._read_documents(results)
 

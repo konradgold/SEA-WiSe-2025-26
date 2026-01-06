@@ -28,7 +28,7 @@ class Ingestion:
     def rss_mb(self, PROC):
         return PROC.memory_info().rss / (1024**2)
 
-    def ingest(self, num_documents: int = 1000, batch_size: int = 500, field: Optional[str] = None):
+    def ingest(self, num_documents: int = 1000, batch_size: int = 500, fields: Optional[List[str]] = None):
         # TODO: adjust batch size based on L1 cache size of CPU
         if batch_size > num_documents or batch_size <= 0:
             batch_size = num_documents
@@ -49,8 +49,8 @@ class Ingestion:
         counter = SimpleNamespace(value = 0)
 
         submitted = 0
-
-        self._clear_existing_blocks(field)
+        for field in fields if fields is not None else ["all"]:
+            self._clear_existing_blocks(field)
 
         def submit_next(ex):
             nonlocal submitted
@@ -74,7 +74,7 @@ class Ingestion:
                 max_workers=max_workers,
                 mp_context=mp_ctx,
                 initializer=init_worker,
-                initargs=(field,),
+                initargs=(fields,),
             ) as ex:
 
                 # prefill the queue
@@ -105,10 +105,12 @@ class Ingestion:
             print("Metadata writing complete.")
             return max_workers, timings
 
-    def _write_metadata_to_disk(self, metadata: Dict[int, list[str|int]]):
-        doc_dict_io = DocDictonaryIO(rewrite=True)
-        doc_dict_io.write_metadata(metadata)
-        doc_dict_io.close()
+    def _write_metadata_to_disk(self, metadata: Dict[str, Dict[int, list[str|int]]]):
+        for field, meta in metadata.items():
+            print(f"Writing metadata for field '{field}' with {len(meta):,} documents...")
+            doc_dict_io = DocDictonaryIO(rewrite=True, field=field)
+            doc_dict_io.write_metadata(meta)
+            doc_dict_io.close()
 
     def _clear_existing_blocks(self, field: Optional[str] = None):
         cfg = Config(load=True)
@@ -190,21 +192,20 @@ def main() -> None:
     if cfg.SEARCH.FIELDED.ACTIVE:
         fields = cfg.SEARCH.FIELDED.FIELDS
     else:
-        fields = [None]
+        fields = ["all"]
     assert_doc_structure(cfg)
     no_of_terms = 0
     merge_timing = 0.0
     no_of_workers, ingest_timings = 0, []
-    for field in fields:
-        workers, timings = ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE, field=field)
-        no_of_workers = max(no_of_workers, workers)
-        ingest_timings.extend(timings)
-        message = f"Merging fielded blocks for field '{field}'..." if field is not None else "Merging blocks..."
-        print(message)
-        merger = KMerger(cfg.BLOCK_PATH, field)
-        no_terms, timing = merger.merge_blocks()
-        no_of_terms += no_terms
-        merge_timing += timing
+    workers, timings = ingestion.ingest(cfg.INGESTION.NUM_DOCUMENTS, cfg.INGESTION.BATCH_SIZE, fields=fields)
+    no_of_workers = max(no_of_workers, workers)
+    ingest_timings.extend(timings)
+    message = f"Merging fielded blocks for fields '{fields}'..." if fields is not None else "Merging blocks..."
+    print(message)
+    merger = KMerger(cfg.BLOCK_PATH, fields)
+    no_terms, timing = merger.merge_blocks()
+    no_of_terms += no_terms
+    merge_timing += timing
 
     end = perf_counter()
     total_time = end - start
