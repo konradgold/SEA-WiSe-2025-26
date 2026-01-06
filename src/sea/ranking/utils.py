@@ -1,5 +1,10 @@
 from functools import total_ordering
 from typing import Callable, Optional
+from rich.console import Console
+from rich.markdown import Markdown
+from sea.utils.chunker import Chunker
+
+console = Console()
 
 
 @total_ordering
@@ -11,13 +16,15 @@ class Document:
         self.content = content
         self.score = score
 
-    def pprint(self, verbose: bool = False, loud: bool = False) -> str:
+    def pprint(self, verbose: bool = False, loud: bool = False, chunker: Optional[Chunker]=None) -> str:
         if verbose:
-            t = f"Document ID: {self.doc_id}\nLink: {self.link}\nTitle: {self.title}\nContent: {self.content}\n\nScoring: {self.score}"
+            if chunker is not None and self.content is not None:
+                self.content = chunker.chunk_text(self.content)
+            t = f"## Document ID: {self.doc_id}\n\n**Title**: [{self.title}]({self.link})\n\n**Content**: {self.content}\n\n**Scoring**: _{self.score:2f}_"
         else:
             t = f"Document ID: {self.doc_id}\nTitle: {self.title}\nScore: {self.score}"
         if loud:
-            print(t)
+            console.print(Markdown(t))
         return t
     
     def __eq__(self, other):

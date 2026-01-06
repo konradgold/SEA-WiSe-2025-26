@@ -7,6 +7,7 @@ from prompt_toolkit.history import InMemoryHistory
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
 from sea.query.splade import SpladeEncoder
 from sea.ranking.io_wrapper import bm25
+from sea.utils.chunker import Chunker
 from sea.utils.config_wrapper import Config
 
 
@@ -33,6 +34,7 @@ def main():
     session = PromptSession(history=history)
     ranker = bm25()
     splade_encoder = None
+    chunker = Chunker(cfg=cfg)
     tokenizer = get_tokenizer(cfg)
     if cfg.SEARCH.EXPAND_QUERIES:
         from sea.query.splade import SpladeEncoder
@@ -56,11 +58,12 @@ def main():
             tokenizer=tokenizer
         )
         elapsed = (time.perf_counter() - t0)*1000
-        history.append_string(final_query)
+        history.append_string(query)
+        chunker.set_query(final_query.split())
 
         if documents:
             for doc in documents:
-                doc.pprint(verbose=cfg.SEARCH.VERBOSE_OUTPUT, loud=True)
+                doc.pprint(verbose=cfg.SEARCH.VERBOSE_OUTPUT, loud=True, chunker=chunker)
 
             print(f"\nFound {len(documents)} matches in {elapsed:.2f} milliseconds.")
         else:

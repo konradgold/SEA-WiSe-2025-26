@@ -18,6 +18,14 @@ class TokenizerConfig:
 
 
 @dataclass
+class ChunkerConfig:
+    MAX_CHUNK_SIZE: int = 80
+    MIN_CHUNK_SIZE: int = 30
+    CHUNK_OVERLAP: int = 10
+    ENABLE: bool = True
+
+
+@dataclass
 class FIELDEDConfig:
     ACTIVE: bool = True
     FIELDS: List[str] = field(default_factory=lambda: ["title", "body", "url"])
@@ -104,6 +112,7 @@ class LTRConfig:
 @dataclass
 class MainConfig:
     TOKENIZER: TokenizerConfig = field(default_factory=TokenizerConfig)
+    CHUNKER: ChunkerConfig = field(default_factory=ChunkerConfig)
     SEARCH: SearchConfig = field(default_factory=SearchConfig)
     BM25: BM25Config = field(default_factory=BM25Config)
     INGESTION: IngestionConfig = field(default_factory=IngestionConfig)

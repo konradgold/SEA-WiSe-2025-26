@@ -10,6 +10,12 @@ TOKENIZER:
   STORE_POSITIONS: false
   STORE_TOKENS: false
 
+CHUNKER:
+  MAX_CHUNK_SIZE: 80
+  MIN_CHUNK_SIZE: 30
+  CHUNK_OVERLAP: 10
+  ENABLE: true
+
 DOCUMENTS: "data/msmarco-docs.tsv"
 DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
 INDEX_INTERVAL: 50
