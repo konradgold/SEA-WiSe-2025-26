@@ -58,7 +58,7 @@ class SpladeEncoder:
         input_tokens = set(self.tokenizer.tokenize(text))
         tokens -= input_tokens
         tokens = list(tokens)[:self.cutoff]
-        out = tokens + list(input_tokens)
+        out = tokens + text.split()
         return out
     
     def tokenize(self, text):
