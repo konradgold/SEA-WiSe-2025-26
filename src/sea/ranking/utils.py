@@ -20,7 +20,7 @@ class Document:
         if verbose:
             if chunker is not None and self.content is not None:
                 self.content = chunker.chunk_text(self.content)
-            t = f"## Document ID: {self.doc_id}\n\n**Title**: [{self.title}]({self.link})\n\n**Content**: {self.content}\n\n**Scoring**: _{self.score:2f}_"
+            t = f"## Document ID: {self.doc_id}\n\n**Title**: [{self.title}]({self.link})\n\n**Content**: {self.content}\n\n**Scoring**: _{self.score:.2f}_"
         else:
             t = f"Document ID: {self.doc_id}\nTitle: {self.title}\nScore: {self.score}"
         if loud:

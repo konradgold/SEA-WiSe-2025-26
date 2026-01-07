@@ -2,7 +2,7 @@ from array import array
 import heapq
 import os
 from time import perf_counter
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Tuple
 from sea.storage.IO import BlockIO
 from sea.storage.manager import StorageManager
 

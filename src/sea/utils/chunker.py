@@ -1,6 +1,7 @@
 from collections import Counter
 from typing import List, Optional
 
+from numpy import mean
 from omegaconf import DictConfig
 
 from sea.utils.config_wrapper import Config
@@ -33,7 +34,8 @@ class Chunker:
             return ""
 
         # Adjust chunk size within configured bounds.
-        chunk_size = min(self.max_chunk_size, max(self.min_chunk_size, len(words)))
+        mean_lengths: int = int(mean([len(word) for word in words])) * 2
+        chunk_size= 250 // mean_lengths # Approximate number of words to fit in 250 chars.
         step = max(1, chunk_size - self.chunk_overlap)
 
         if not self.query:
@@ -51,7 +53,7 @@ class Chunker:
             window_counter = Counter(window_words)
 
             unique_hits = sum(1 for term in query_terms if window_counter[term] > 0)
-            total_hits = sum(window_counter[term]for term, _ in query_counter.items())
+            total_hits = sum(window_counter[term] for term, _ in query_counter.items())
             coverage_ratio = unique_hits / len(query_terms) if query_terms else 0.0
 
             # Primary: cover most unique terms, secondary: repeat hits, tertiary: earlier chunk.

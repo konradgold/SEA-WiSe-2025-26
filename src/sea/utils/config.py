@@ -1,7 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List
 from hydra.core.config_store import ConfigStore
-from omegaconf import DictConfig
 
 @dataclass
 class TokenizerConfig:
@@ -34,6 +33,12 @@ class FIELDEDConfig:
         "body": 80.0,
         "url": 10.0
     })
+    WEIGHTS: dict = field(default_factory=lambda: {
+        "title": 2.0,
+        "body": 1.0,
+        "url": 1.5
+    })
+
 @dataclass
 class SearchConfig:
     MAX_RESULTS: int = 10

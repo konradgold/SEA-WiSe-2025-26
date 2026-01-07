@@ -45,7 +45,7 @@ class Ingestion:
         else:
             mp_ctx = mp.get_context("forkserver")
 
-         # "fork" on Linux/WSL; keep "spawn" on macOS/Windows
+         # "forkserver" on Linux/WSL; keep "spawn" on macOS/Windows
         counter = SimpleNamespace(value = 0)
 
         submitted = 0

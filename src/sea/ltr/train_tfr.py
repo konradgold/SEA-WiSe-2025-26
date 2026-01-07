@@ -16,7 +16,7 @@ from sea.ltr.candidates import iter_qids, load_qrels_map, load_queries_map
 from sea.ltr.features import FeatureExtractor
 from sea.ltr.tfr_data import iter_listwise_samples
 from sea.ltr.tfr_model import TFRConfig, build_tfr_scoring_model, compile_tfr_model
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 def _tf_dataset_from_generator(
@@ -202,7 +202,7 @@ def main(cfg: DictConfig) -> None:
             project=cfg.LTR.WANDB.PROJECT,
             name=args.wandb_run_name,
             group=cfg.LTR.WANDB.GROUP,
-            config=vars(cfg),
+            config=OmegaConf.to_container(cfg, resolve=True), # type: ignore
         )
         callbacks.append(WandbMetricsLogger(log_freq=cfg.log_freq))
         checkpoint_cls = (

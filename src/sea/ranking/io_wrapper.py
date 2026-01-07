@@ -16,8 +16,7 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=3_300_0
     offsets = []
     with open(tsv_path, 'rb') as index:
         offsets.append(0)
-        index.readline()
-        for i, line in tqdm.tqdm(enumerate(index, 2)):
+        for i, line in tqdm.tqdm(enumerate(index, 1)):
             if i % interval == 0:
                 offsets.append(index.tell())
             if i >= limit:

@@ -7,7 +7,6 @@ from typing import List, Tuple, Dict, Optional
 import enum
 
 from omegaconf import DictConfig
-from sympy import field
 
 from sea.index.tokenization import get_tokenizer
 from sea.storage.IO import BlockIO
@@ -18,6 +17,7 @@ class Columns(enum.Enum):
     url   = "url"
     title  = "title"
     body   = "body"
+    all = "all"
 
 class Document:
     def __init__(self, doc_id: str, url: str, title: str, body: str):
