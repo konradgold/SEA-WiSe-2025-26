@@ -1,42 +1,33 @@
-import argparse
 import sys
 from pathlib import Path
+import hydra
 import tqdm
-import numpy as np
 
 # Ensure we can import from the current project
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
-from sea.utils.config import Config
 from sea.storage.IO import DocDictonaryIO
 
-def main():
-    cfg = Config(load=True)
+
+@hydra.main(config_path="../../../configs", config_name="debug_preparation", version_base=None)
+def main(cfg):
     cfg.SEARCH.VERBOSE_OUTPUT = False
 
-    parser = argparse.ArgumentParser(description="Debug LTR data preparation yield.")
-    parser.add_argument("--queries", type=str, required=True, help="Path to queries TSV.")
-    parser.add_argument("--qrels", type=str, required=True, help="Path to qrels file.")
-    parser.add_argument("--split-file", type=str, required=True, help="Path to split file (e.g. val_qids.txt).")
-    parser.add_argument("--limit", type=int, default=1000, help="Number of queries to analyze (default: 1000).")
-    parser.add_argument("--candidate-topn", type=int, default=200, help="Top-N to check recall for (default: 200).")
-    args = parser.parse_args()
-
     print(f"--- Configuration ---")
-    print(f"Queries: {args.queries}")
-    print(f"Qrels: {args.qrels}")
-    print(f"Split File: {args.split_file}")
-    print(f"Limit: {args.limit}")
-    print(f"Target Top-N: {args.candidate_topn}")
+    print(f"Queries: {cfg.queries}")
+    print(f"Qrels: {cfg.qrels}")
+    print(f"Split File: {cfg.split_file}")
+    print(f"Limit: {cfg.limit}")
+    print(f"Target Top-N: {cfg.candidate_topn}")
     print("----------------------\n")
 
     print("Loading data...")
-    queries = load_queries_map(args.queries)
-    qrels = load_qrels_map(args.qrels)
-    all_qids = list(iter_qids(args.split_file))
-    qids = all_qids[:args.limit] if args.limit > 0 else all_qids
+    queries = load_queries_map(cfg.queries)
+    qrels = load_qrels_map(cfg.qrels)
+    all_qids = list(iter_qids(cfg.split_file))
+    qids = all_qids[:cfg.limit] if cfg.limit > 0 else all_qids
 
     print(f"Loaded {len(queries)} queries, {len(qrels)} qrels groups.")
     print(f"Analyzing {len(qids)} QIDs from split file...\n")
@@ -59,7 +50,7 @@ def main():
     retriever = BM25Retriever.from_config(cfg)
     
     # Check a few more thresholds for sensitivity
-    thresholds = [10, 50, 100, args.candidate_topn, 500, 1000]
+    thresholds = [10, 50, 100, cfg.candidate_topn, 500, 1000]
     thresholds = sorted(list(set(thresholds)))
     recall_counts = {t: 0 for t in thresholds}
 
@@ -94,7 +85,7 @@ def main():
             if any(pid in top_t_ids for pid in pos_int_ids):
                 recall_counts[t] += 1
         
-        if any(pid in set(retrieved_ids[:args.candidate_topn]) for pid in pos_int_ids):
+        if any(pid in set(retrieved_ids[:cfg.candidate_topn]) for pid in pos_int_ids):
             stats["5_in_top_n"] += 1
 
     print("\n--- Funnel Analysis ---")
@@ -107,7 +98,7 @@ def main():
         ("Has Query Text", stats["2_has_query"]),
         ("Has Qrels", stats["3_has_qrels"]),
         ("Positives in Index", stats["4_in_index"]),
-        (f"In Top-{args.candidate_topn} (Yield)", stats["5_in_top_n"])
+        (f"In Top-{cfg.candidate_topn} (Yield)", stats["5_in_top_n"])
     ]
 
     for name, count in steps:

@@ -1,0 +1,3 @@
+- queries=["hi", "bye"]
+- qrels=path
+- split_file=whatever

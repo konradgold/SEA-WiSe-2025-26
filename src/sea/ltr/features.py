@@ -1,16 +1,16 @@
 from __future__ import annotations
-
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Iterable, Optional
 
 import numpy as np
+from omegaconf import DictConfig
 
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
 from sea.ranking.utils import Document
 from sea.storage.manager import StorageManager
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class FeatureSpec:
     names: list[str]
 
 
-def get_default_features(cfg: Optional[Config] = None) -> FeatureSpec:
+def get_default_features(cfg: Optional[DictConfig] = None) -> FeatureSpec:
     if cfg and hasattr(cfg, "LTR") and hasattr(cfg.LTR, "FEATURES"):
         return FeatureSpec(names=list(cfg.LTR.FEATURES))
     return FeatureSpec(
@@ -59,7 +59,7 @@ class _LRUCache:
 
 @dataclass
 class FeatureExtractor:
-    cfg: Config
+    cfg: DictConfig
     tokenizer: TokenizerAbstract
     storage: StorageManager
     posting_cut: int
@@ -75,7 +75,7 @@ class FeatureExtractor:
         self._cache = _LRUCache(max_size=self.cache_max_docs)
 
     @classmethod
-    def from_config(cls, cfg: Optional[Config] = None, *, cache_max_docs: int = 10_000) -> "FeatureExtractor":
+    def from_config(cls, cfg: Optional[DictConfig] = None, *, cache_max_docs: int = 10_000) -> "FeatureExtractor":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
         storage = StorageManager(rewrite=False, cfg=cfg)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 from datetime import datetime
 
 def write_message_to_log_file(message: str) -> None:

@@ -29,7 +29,7 @@ Tokenizer configuration is controlled via `configs/base.yaml`.
 
 Run search:
 ```python
-uv run python -m sea.query.search
+uv run python -m sea.query.search_simple
 ```
 
 ## Performance benchmarking

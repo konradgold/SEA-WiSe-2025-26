@@ -1,0 +1,11 @@
+defaults:
+  - base  # Inherits from base.yaml
+  - _self_
+
+# CLI Specific Overrides
+queries: "data/msmarco-doctrain-queries.tsv"
+qrels: "data/msmarco-doctrain-qrels.tsv"
+qids: "sample_queries.txt"
+topn: 200
+out: "data/candidates.pkl"
+metrics_out: ""

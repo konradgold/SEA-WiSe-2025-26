@@ -1,0 +1,10 @@
+defaults:
+  - base  # Inherits from base.yaml
+  - _self_
+
+queries: ??? # Path to queries file
+qrels: ??? # Path to qrels file
+split_file: ??? # Path to split file
+
+limit: 1000
+candidate_topn: 200

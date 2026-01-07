@@ -4,6 +4,8 @@ import argparse
 import json
 from pathlib import Path
 
+import hydra
+
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.candidates import (
     build_bm25_candidates,
@@ -15,32 +17,24 @@ from sea.ltr.candidates import (
 )
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Precompute BM25 top-N candidates for a set of query ids.")
-    ap.add_argument("--queries", type=str, required=True)
-    ap.add_argument("--qrels", type=str, required=True)
-    ap.add_argument("--qids", type=str, required=True)
-    ap.add_argument("--topn", type=int, default=200)
-    ap.add_argument("--out", type=str, required=True)
-    ap.add_argument("--metrics-out", type=str, default="")
-    args = ap.parse_args()
-
-    queries = load_queries_map(args.queries)
-    qrels = load_qrels_map(args.qrels)
-    qids = list(iter_qids(args.qids))
+@hydra.main(config_path="../../../configs", config_name="ltr_cli", version_base=None)
+def main(cfg) -> None:
+    queries = load_queries_map(cfg.queries)
+    qrels = load_qrels_map(cfg.qrels)
+    qids = list(iter_qids(cfg.qids))
 
     retriever = BM25Retriever.from_config()
     candidates = build_bm25_candidates(
-        retriever=retriever, qids=qids, queries=queries, topn=args.topn
+        retriever=retriever, qids=qids, queries=queries, topn=cfg.topn
     )
-    write_candidates_jsonl(candidates, args.out)
+    write_candidates_jsonl(candidates, cfg.out)
 
-    if args.metrics_out:
+    if cfg.metrics_out:
         metrics = compute_candidate_recall(candidates=candidates, qrels=qrels)
-        p = Path(args.metrics_out)
+        p = Path(cfg.metrics_out)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(metrics, indent=2) + "\n", encoding="utf-8")
-        print(f"Wrote diagnostics to {args.metrics_out}")
+        print(f"Wrote diagnostics to {cfg.metrics_out}")
 
 
 if __name__ == "__main__":

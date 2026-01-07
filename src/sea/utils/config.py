@@ -1,99 +1,143 @@
-from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import List
+from hydra.core.config_store import ConfigStore
 
-import copy
-import json
-from pathlib import Path
-from typing import Any, Optional
-
-import yaml
-
-
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    """Recursively merge override into base (mutates base) and return base."""
-    for k, v in override.items():
-        if isinstance(v, dict) and isinstance(base.get(k), dict):
-            _deep_merge(base[k], v)
-        else:
-            base[k] = v
-    return base
+@dataclass
+class TokenizerConfig:
+    MIN_LEN: int = 2
+    BACKEND: str = "simple"
+    LOWERCASE: bool = True
+    ASCII_FOLD: bool = False
+    REMOVE_STOPWORDS: bool = True
+    STEM: bool = False
+    NUMBER_NORMALIZE: bool = False
+    NUM_WORKERS: int = 0
+    STORE_POSITIONS: bool = False
+    STORE_TOKENS: bool = False
 
 
-class Config:
-    """
-    Global config object. 
-    It automatically loads from a hierarchy of config files and turns the keys to the 
-    class attributes. 
-    """
-
-    def __init__(
-        self,
-        load: bool = True,
-        cfg_dict: Optional[dict[str, Any]] = None,
-        path: Optional[str] = "configs/base.yaml",
-    ):
-        if load:
-            cfg_path = self._resolve_cfg_path(path)
-            with open(cfg_path, "r") as f:
-                cfg_dict = yaml.safe_load(f) or {}
-            self.cfg_file = str(cfg_path)
-        else:
-            self.cfg_file = None
-            cfg_dict = cfg_dict or {}
-
-        if not isinstance(cfg_dict, dict):
-            raise TypeError(f"Config root must be a dict, got: {type(cfg_dict)}")
-
-        self.cfg_dict: dict[str, Any] = cfg_dict
-        self._refresh_attributes()
-
-    def _refresh_attributes(self) -> None:
-        def wrap(v: Any) -> Any:
-            if isinstance(v, dict):
-                return Config(load=False, cfg_dict=v, path=None)
-            return v
-
-        for k, v in self.cfg_dict.items():
-            setattr(self, k, wrap(v))
-
-    def _find_project_root(self, start: Path | str = __file__) -> Path:
-        """Walk up from `start` to locate the directory containing pyproject.toml."""
-        p = Path(start).resolve()
-        for parent in (p, *p.parents):
-            if (parent / "pyproject.toml").exists():
-                return parent
-        # Fallback: current working dir
-        return Path.cwd().resolve()
-
-    def _resolve_cfg_path(self, user_path: Optional[str]) -> Path:
-        root = self._find_project_root()
-        if user_path is None:
-            return root / "configs" / "base.yaml"
-        p = Path(user_path).expanduser()
-        if not p.is_absolute():
-            p = (root / p).resolve()
-        else:
-            p = p.resolve()
-        if not p.exists():
-            raise FileNotFoundError(f"Config file not found: {p}")
-        return p
-
-    def update_dict(self, cfg_dict: dict[str, Any]) -> None:
-        """Deep-merge overrides into the existing config and refresh attributes."""
-        if not isinstance(cfg_dict, dict):
-            raise TypeError("update_dict expects a dict")
-        _deep_merge(self.cfg_dict, cfg_dict)
-        self._refresh_attributes()
-
-    def dump(self) -> str:
-        return json.dumps(self.cfg_dict, indent=2, ensure_ascii=False)
-
-    def deep_copy(self) -> "Config":
-        return copy.deepcopy(self)
-
-    def __repr__(self) -> str:
-        return f"{self.dump()}\n"
+@dataclass
+class ChunkerConfig:
+    MAX_CHUNK_SIZE: int = 80
+    MIN_CHUNK_SIZE: int = 30
+    CHUNK_OVERLAP: int = 10
+    ENABLE: bool = True
 
 
-if __name__ == "__main__":
-    cfg = Config(load=True)
-    print(cfg.dump())
+@dataclass
+class FIELDEDConfig:
+    ACTIVE: bool = True
+    FIELDS: List[str] = field(default_factory=lambda: ["title", "body", "url"])
+    LENGTHS: dict = field(default_factory=lambda: {
+        "title": 20.0,
+        "body": 80.0,
+        "url": 10.0
+    })
+    WEIGHTS: dict = field(default_factory=lambda: {
+        "title": 2.0,
+        "body": 1.0,
+        "url": 1.5
+    })
+
+@dataclass
+class SearchConfig:
+    MAX_RESULTS: int = 10
+    POSTINGS_CUT: int = 100000
+    EXPAND_QUERIES: bool = False
+    RANKING: str = "bm25"
+    NUM_DOCS: int = 100000
+    AVG_DOC_LEN: float = 100.0
+    VERBOSE_OUTPUT: bool = False
+    FIELDED: FIELDEDConfig = field(default_factory=FIELDEDConfig)
+
+@dataclass
+class BM25Config:
+    K1: float = 1.5
+    B: float = 0.75
+
+@dataclass
+class IngestionConfig:
+    NUM_DOCUMENTS: int = 32000
+    BATCH_SIZE: int = 1000
+
+@dataclass
+class QueryConfig:
+    MAX_PHRASE_LEN: int = 5
+
+@dataclass
+class SpladeConfig:
+    MODEL_ID: str = "naver/splade-cocondenser-ensembledistil"
+    DEVICE: str = "cuda:0"
+    THRESHOLD: float = 0.01
+    CACHE_DIR: str = "cache/splade"
+    CAP_EXPANSION: int = 2
+
+@dataclass
+class SchedulerConfig:
+    TYPE: str = "cosine"
+    DECAY_STEPS: int = 10000
+    DECAY_RATE: float = 0.9
+    ALPHA: float = 0.1
+
+@dataclass
+class LTRModelConfig:
+    HIDDEN_UNITS: List[int] = field(default_factory=lambda: [512, 256, 128])
+    DROPOUT: float = 0.1
+    USE_ATTENTION: bool = True
+
+@dataclass
+class WandBConfig:
+    PROJECT: str = "SEA-WiSe-2025-26"
+    GROUP: str = "reranker"
+    LOG_MODEL: bool = True
+
+@dataclass
+class LTRConfig:
+    DATA_DIR: str = "data"
+    QUERIES: str = "data/msmarco-doctrain-queries.tsv"
+    QRELS: str = "data/msmarco-doctrain-qrels.tsv"
+    SPLIT_DIR: str = "data/splits"
+    TRAIN_CACHE: str = "data/train_cache_20k.npz"
+    VAL_CACHE: str = "data/val_cache_5k.npz"
+    CANDIDATE_TOPN: int = 200
+    LIST_SIZE: int = 100
+    EPOCHS: int = 1
+    BATCH_SIZE: int = 1024
+    LEARNING_RATE: float = 0.001
+    SCHEDULER: SchedulerConfig = field(default_factory=SchedulerConfig)
+    SEED: int = 42
+    MODEL: LTRModelConfig = field(default_factory=LTRModelConfig)
+    WANDB: WandBConfig = field(default_factory=WandBConfig)
+    FEATURES: List[str] = field(default_factory=lambda: [
+        "bm25_score", "query_len", "query_uniq_len", "title_len", "body_len",
+        "title_overlap_cnt", "body_overlap_cnt", "body_overlap_ratio",
+        "idf_body_overlap_sum", "idf_title_overlap_sum"
+    ])
+
+@dataclass
+class MainConfig:
+    TOKENIZER: TokenizerConfig = field(default_factory=TokenizerConfig)
+    CHUNKER: ChunkerConfig = field(default_factory=ChunkerConfig)
+    SEARCH: SearchConfig = field(default_factory=SearchConfig)
+    BM25: BM25Config = field(default_factory=BM25Config)
+    INGESTION: IngestionConfig = field(default_factory=IngestionConfig)
+    QUERY: QueryConfig = field(default_factory=QueryConfig)
+    SPLADE: SpladeConfig = field(default_factory=SpladeConfig)
+    LTR: LTRConfig = field(default_factory=LTRConfig)
+    
+    DOCUMENTS: str = "data/msmarco-docs.tsv"
+    DOCUMENT_OFFSETS: str = "data/msmarco-offsets.pkl"
+    INDEX_INTERVAL: int = 50
+    DATA_PATH: str = "data/"
+    BLOCK_PATH: str = "data/blocks/"
+    HEADER_BLOCK_FILE: str = "SEAB\x01"
+    HEADER_INDEX_FILE: str = "SEAI\x01"
+    HEADER_POSTING_FILE: str = "SEAP\x01"
+    HEADER_DOC_DICT_FILE: str = "SEAD\x01"
+    LOG_PATH: str = "data/log.txt"
+
+def register_configs() -> None:
+    cs = ConfigStore.instance()
+    cs.store(name="base_config", node=MainConfig)
+
+# Automatically register when this module is imported

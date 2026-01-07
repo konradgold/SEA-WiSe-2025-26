@@ -1,7 +1,5 @@
 import unittest
-
-import yaml
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 from sea.query.splade import SpladeEncoder
 
 class TestSplade(unittest.TestCase):
@@ -14,22 +12,21 @@ class TestSplade(unittest.TestCase):
         ]
         self.encoder = SpladeEncoder(cfg=cfg)
     
-    def test_encode_returns_dicts(self):
+    def test_encode_returns_list(self):
         """Test that encode returns two dictionaries with expected structure."""
-        sparse_dict, sparse_dict_tokens = self.encoder.encode(self.test_texts[0])
+        sparse_dict, sparse_dict_tokens = self.encoder._encode(self.test_texts[0])
         
         self.assertIsInstance(sparse_dict, dict)
-        self.assertIsInstance(sparse_dict_tokens, dict)
+        self.assertIsInstance(sparse_dict_tokens, list)
         self.assertGreater(len(sparse_dict), 0)
         self.assertGreater(len(sparse_dict_tokens), 0)
-        self.assertEqual(len(sparse_dict), len(sparse_dict_tokens))
 
         # Check token dictionary has string keys and float values
-        self.assertTrue(all(isinstance(k, str) for k in sparse_dict_tokens.keys()))
-        self.assertTrue(all(isinstance(v, float) for v in sparse_dict_tokens.values()))
+        self.assertTrue(all(isinstance(k[0], str) for k in sparse_dict_tokens))
+        self.assertTrue(all(isinstance(v[1], float) for v in sparse_dict_tokens))
 
         # Check that all weights are greater than 0
-        self.assertTrue(all(v > 0 for v in sparse_dict_tokens.values()))
+        self.assertTrue(all(v[1] > 0 for v in sparse_dict_tokens))
         self.assertTrue(all(v > 0 for v in sparse_dict.values()))
 
     def test_expand_returns_list_of_tokens(self):

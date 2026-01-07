@@ -220,3 +220,5 @@ notebooks/*.txt
 cache
 wandb
 artifacts/*
+
+outputs/*
