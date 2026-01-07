@@ -3,6 +3,7 @@ from typing import List, Optional
 
 from numpy import mean
 from omegaconf import DictConfig
+from torch import chunk
 
 from sea.utils.config_wrapper import Config
 
@@ -22,16 +23,14 @@ class Chunker:
     
     def chunk_text(self, text: str) -> str:
         """Return a single chunk that covers as many query terms as possible."""
-        if not self.enable:
+        if not self.enable or not text:
             return text
-        if not text:
-            return ""
 
         words = text.lower().split()
         words_normal = text.split()
 
         if not words:
-            return ""
+            return text
 
         # Adjust chunk size within configured bounds.
         mean_lengths: int = int(mean([len(word) for word in words])) * 2
@@ -44,20 +43,14 @@ class Chunker:
         query_counter = Counter(self.query)
         query_terms = set(query_counter)
 
-        best_score = (-1.0, -1.0, -1.0, 0)  # (unique_hits, coverage_ratio, total_hits, -start)
+        best_score = (-1.0, -1.0, -1.0)  # (unique_hits, coverage_ratio, total_hits, -start)
         best_range = (0, min(chunk_size, len(words)))
 
         for start in range(0, len(words), step):
             end = min(start + chunk_size, len(words))
-            window_words = words[start:end]
-            window_counter = Counter(window_words)
-
-            unique_hits = sum(1 for term in query_terms if window_counter[term] > 0)
-            total_hits = sum(window_counter[term] for term, _ in query_counter.items())
-            coverage_ratio = unique_hits / len(query_terms) if query_terms else 0.0
-
-            # Primary: cover most unique terms, secondary: repeat hits, tertiary: earlier chunk.
-            score = (unique_hits, coverage_ratio, total_hits, -start)
+            score = self.calculate_score(words[start:end], query_counter)
+            
+            
             if score > best_score:
                 best_score = score
                 best_range = (start, end)
@@ -67,6 +60,16 @@ class Chunker:
         marked_chunk = self._mark_query_terms(chunk_words)
         best_chunk = "..." + " ".join(marked_chunk) + "..."
         return best_chunk if best_chunk else text
+    
+    def calculate_score(self, chunk_words: list[str], query_counter: Counter) -> tuple[float, float, float]:
+        window_counter = Counter(chunk_words)
+
+        unique_hits = sum(1 for term in query_counter.keys() if window_counter[term] > 0)
+        total_hits = sum(window_counter[term] for term, _ in query_counter.items())
+        coverage_ratio = unique_hits / len(query_counter) if query_counter else 0.0
+
+        # Primary: cover most unique terms, secondary: repeat hits, tertiary: earlier chunk.
+        return (unique_hits, coverage_ratio, total_hits)
 
     def _mark_query_terms(self, words: list[str]) -> list[str]:
         """Mark query terms in the chunk using **term** markdown-style formatting."""
