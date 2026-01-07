@@ -7,7 +7,6 @@ from typing import List, Tuple, Dict, Optional
 import enum
 
 from omegaconf import DictConfig
-from sympy import field
 
 from sea.index.tokenization import get_tokenizer
 from sea.storage.IO import BlockIO
