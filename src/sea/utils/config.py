@@ -39,6 +39,15 @@ class FIELDEDConfig:
         "url": 1.5
     })
 
+
+@dataclass
+class RerankerConfig:
+    ENABLED: bool = False
+    MODEL_PATH: str | None = None
+    CANDIDATE_TOPN: int = 200
+    TOPK: int = 10
+
+
 @dataclass
 class SearchConfig:
     MAX_RESULTS: int = 10
@@ -49,6 +58,7 @@ class SearchConfig:
     AVG_DOC_LEN: float = 100.0
     VERBOSE_OUTPUT: bool = False
     FIELDED: FIELDEDConfig = field(default_factory=FIELDEDConfig)
+    RERANKER: RerankerConfig = field(default_factory=RerankerConfig)
 
 @dataclass
 class BM25Config:

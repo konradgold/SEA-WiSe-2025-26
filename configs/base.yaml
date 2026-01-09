@@ -35,6 +35,11 @@ SEARCH:
   NUM_DOCS: 32000
   AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: true
+  RERANKER:
+    ENABLED: true
+    MODEL_PATH: "artifacts/tfr_reranker/model.keras"
+    CANDIDATE_TOPN: 200
+    TOPK: 10
   FIELDED:
     ACTIVE: true
     FIELDS: ["title", "body", "url"]
