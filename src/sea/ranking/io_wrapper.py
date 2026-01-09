@@ -229,13 +229,17 @@ class BM25(RankerAdapter):
 
 RankersRegistry = RankingRegistry()
 
-def bm25():
-    cfg = Config(load=True)
+
+def bm25(cfg: Optional[DictConfig] = None):
+    if cfg is None:
+        cfg = Config(load=True)
     ranker = BM25Ranking(cfg)
     return BM25(ranker, cfg=cfg)
 
-def tfidf():
-    cfg = Config(load=True)
+
+def tfidf(cfg: Optional[DictConfig] = None):
+    if cfg is None:
+        cfg = Config(load=True)
     ranker = TFIDFRanking(cfg)
     return TFIDF(ranker, cfg=cfg)
 

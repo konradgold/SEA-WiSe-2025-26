@@ -93,34 +93,33 @@ def main():
 
     if not (args.queries and args.qrels and args.split_file):
         ap.error("Must provide --queries, --qrels, and --split-file (or define in base.yaml).")
-    
+
     print("Loading queries and qrels...")
     queries = load_queries_map(args.queries)
     qrels = load_qrels_map(args.qrels)
     qids = list(iter_qids(args.split_file))
-    
+
     if args.limit > 0:
         qids = qids[:args.limit]
 
+    retriever = BM25Retriever.from_config(cfg)
+    fe = FeatureExtractor.from_config(cfg)
+
     # Convert qrels to internal IDs once (avoids repeated lookups)
     print("Mapping qrels to internal IDs...")
-    from sea.storage.IO import DocDictonaryIO
-    doc_io = DocDictonaryIO(rewrite=False, cfg=cfg)
-    doc_metadata = doc_io.read()
+    # Use the first available storage manager to get doc metadata
+    storage_mgr = next(iter(retriever.ranker.storage_managers.values()))
+    doc_metadata = storage_mgr.getDocMetadata()
+    if not doc_metadata:
+        print("Error: Document metadata is empty. Please re-run ingestion.")
+        return
     orig_to_int = {meta[0]: doc_id for doc_id, meta in doc_metadata.items()}
-    
+
     qrels_internal = {}
     for qid, orig_ids in qrels.items():
         internal_ids = {orig_to_int[oid] for oid in orig_ids if oid in orig_to_int}
         if internal_ids:
             qrels_internal[qid] = internal_ids
-    
-    del doc_metadata, orig_to_int
-    doc_io.close()
-
-    print("Initializing retriever and feature extractor...")
-    retriever = BM25Retriever.from_config(cfg)
-    fe = FeatureExtractor.from_config(cfg)
 
     all_features = []
     all_labels = []
@@ -130,7 +129,7 @@ def main():
     for qid in tqdm.tqdm(qids, desc="Extracting features"):
         query = queries.get(qid)
         positives_internal = qrels_internal.get(qid)
-        
+
         if query is None or not positives_internal:
             skipped += 1
             continue
@@ -152,11 +151,11 @@ def main():
             list_size=args.list_size,
             seed=args.seed,
         )
-        
+
         if result is None:
             skipped += 1
             continue
-            
+
         features, labels = result
         all_features.append(features)
         all_labels.append(labels)
@@ -167,10 +166,10 @@ def main():
 
     print(f"Generated {len(all_features)} samples (skipped {skipped} queries)")
     print(f"Saving to {args.out}...")
-    
+
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     np.savez_compressed(
         args.out,
         features=np.array(all_features, dtype=np.float32),

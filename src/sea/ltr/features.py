@@ -78,7 +78,13 @@ class FeatureExtractor:
     def from_config(cls, cfg: Optional[DictConfig] = None, *, cache_max_docs: int = 10_000) -> "FeatureExtractor":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
-        storage = StorageManager(rewrite=False, cfg=cfg)
+
+        field = None
+        if cfg.SEARCH.FIELDED.ACTIVE:
+            fields = cfg.SEARCH.FIELDED.FIELDS
+            field = "body" if "body" in fields else (fields[0] if fields else None)
+
+        storage = StorageManager(rewrite=False, cfg=cfg, field=field)
         storage.init_all()
         posting_cut = int(cfg.SEARCH.POSTINGS_CUT) if cfg.SEARCH.POSTINGS_CUT is not None else 100
         features = get_default_features(cfg)

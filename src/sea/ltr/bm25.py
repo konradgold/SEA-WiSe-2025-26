@@ -24,7 +24,7 @@ class BM25Retriever:
     def from_config(cls, cfg: DictConfig | None = None) -> "BM25Retriever":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
-        ranker = build_bm25_ranker()
+        ranker = build_bm25_ranker(cfg)
         return cls(cfg=cfg, tokenizer=tokenizer, ranker=ranker)
 
     def retrieve(self, query: str, *, topn: int) -> list[Document]:
@@ -33,13 +33,12 @@ class BM25Retriever:
             return []
 
         # Override limit of top-n candidates since the other BM25 ranking truncates to `cfg.SEARCH.MAX_RESULTS`
-        inner_ranker = self.ranker.ranker
-        old_max = inner_ranker.max_results
-        inner_ranker.max_results = topn
+        old_max = self.ranker.max_results
+        self.ranker.max_results = topn
         try:
             docs: list[Document] = self.ranker(tokens)
         finally:
-            inner_ranker.max_results = old_max
+            self.ranker.max_results = old_max
 
         return docs[:topn] if topn > 0 else []
 
@@ -49,18 +48,20 @@ class BM25Retriever:
         if not tokens:
             return []
 
-        token_list = self.ranker._prepare_tokens(tokens)
-        if not token_list:
+        ranked_results: dict[int, float] = dict()
+        for field in self.ranker.fields:
+            token_list = self.ranker._prepare_tokens(tokens, field=field)
+            if not token_list:
+                continue
+            for doc_id, score in self.ranker.ranker(token_list, field=field).items():
+                ranked_results[doc_id] = ranked_results.get(doc_id, 0.0) + score
+
+        if not ranked_results:
             return []
 
-        inner_ranker = self.ranker.ranker
-        old_max = inner_ranker.max_results
-        inner_ranker.max_results = topn
-        try:
-            results = inner_ranker.rank(token_list)
-        finally:
-            inner_ranker.max_results = old_max
-
+        results = sorted(
+            ranked_results.items(), key=lambda item: item[1], reverse=True
+        )[:topn]
         return results
 
     def hydrate_docs(self, id_score_pairs: list[tuple[int, float]]) -> list[Document]:

@@ -43,7 +43,9 @@ def _sample_list_for_query(
 
     id_map = {}
     for int_id, _ in id_results:
-        orig_id, _ = retriever.ranker.storage_manager.getDocMetadataEntry(int_id)
+        # Use the first available storage manager to get doc metadata
+        storage_mgr = next(iter(retriever.ranker.storage_managers.values()))
+        orig_id, _ = storage_mgr.getDocMetadataEntry(int_id)
         id_map[int_id] = orig_id
 
     pos_int_ids = [int_id for int_id, orig_id in id_map.items() if orig_id in positives]
