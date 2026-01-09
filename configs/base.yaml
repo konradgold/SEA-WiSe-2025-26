@@ -71,8 +71,8 @@ LTR:
   QUERIES: "data/msmarco-doctrain-queries.tsv"
   QRELS: "data/msmarco-doctrain-qrels.tsv"
   SPLIT_DIR: "data/splits"
-  TRAIN_CACHE: "data/train_cache_20k.npz"
-  VAL_CACHE: "data/val_cache_5k.npz"
+  TRAIN_CACHE: "data/test_cache.npz"
+  VAL_CACHE: "data/test_cache.npz"
   CANDIDATE_TOPN: 200
   LIST_SIZE: 100
   EPOCHS: 1

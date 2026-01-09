@@ -52,7 +52,8 @@ def _tf_dataset_from_npz(path: str, *, batch_size: int, shuffle: bool = True):
     ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="train_ltr")
+
+@hydra.main(version_base=None, config_path="../../../configs", config_name="train_ltr")
 def main(cfg: DictConfig) -> None:
     cfg.SEARCH.VERBOSE_OUTPUT = False
 
@@ -194,7 +195,10 @@ def main(cfg: DictConfig) -> None:
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "feature_names.json").write_text(json.dumps(fe.features.names, indent=2) + "\n", encoding="utf-8")
-    (out_dir / "train_args.json").write_text(json.dumps(vars(cfg), indent=2) + "\n", encoding="utf-8")
+    (out_dir / "train_args.json").write_text(
+        json.dumps(OmegaConf.to_container(cfg, resolve=True), indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     callbacks = []
     if not args.no_wandb:
