@@ -45,7 +45,7 @@ class Ingestion:
         else:
             mp_ctx = mp.get_context("forkserver")
 
-         # "forkserver" on Linux/WSL; keep "spawn" on macOS/Windows
+        # "forkserver" on Linux/WSL; keep "spawn" on macOS/Windows
         counter = SimpleNamespace(value = 0)
 
         submitted = 0
@@ -91,16 +91,27 @@ class Ingestion:
                     fut = next(as_completed(pending))
                     pending.remove(fut)
 
-                    br = fut.result()
-                    timings.append(br.timings)
-                    metadata.update(br.metadata)
+                    try:
+                        br = fut.result()
+                        timings.append(br.timings)
+                        for field, field_meta in br.metadata.items():
+                            metadata.setdefault(field, {}).update(field_meta)
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
 
                     # try to submit a replacement
                     new_fut = submit_next(ex)
                     if new_fut is not None:
                         pending.add(new_fut)      
 
-            print(f"Writing metadata for {len(metadata):,} documents to disk...")
+            total_collected = (
+                sum(len(m) for m in metadata.values()) // len(metadata)
+                if metadata
+                else 0
+            )
+            print(
+                f"Collected metadata for {total_collected:,} documents across {len(metadata)} fields."
+            )
             self._write_metadata_to_disk(metadata)
             print("Metadata writing complete.")
             return max_workers, timings
@@ -181,7 +192,6 @@ def assert_doc_structure(cfg: DictConfig) -> None:
     os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
     for field in cfg.SEARCH.FIELDED.FIELDS:
         os.makedirs(os.path.join(cfg.BLOCK_PATH, field), exist_ok=True)
-    
 
 
 def main() -> None:

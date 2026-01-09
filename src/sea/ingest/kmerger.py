@@ -13,15 +13,17 @@ class KMerger():
     """
 
     def __init__(self, block_path: str, fields: List[str] = ["all"]):
-        
+
         self.block_paths: dict[str, str] = {}
         self.blockIOs: dict[str, BlockIO] = {}
         self.storageManagers: dict[str, StorageManager] = {}
         for field in fields:
             self.block_paths[field] = block_path + (f"{field}/" if field is not None else "")
             self.blockIOs[field] = BlockIO(field=field)
-            self.storageManagers[field] = StorageManager(rewrite=True, rewrite_doc_dict=True, field=field)
-    
+            self.storageManagers[field] = StorageManager(
+                rewrite=True, rewrite_doc_dict=False, field=field
+            )
+
     def merge_blocks(self):
         start = perf_counter()
         terms_merged = 0
