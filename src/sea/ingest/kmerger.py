@@ -2,9 +2,13 @@ from array import array
 import heapq
 import os
 from time import perf_counter
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
+
+from omegaconf import DictConfig
+
 from sea.storage.IO import BlockIO
 from sea.storage.manager import StorageManager
+from sea.utils.config_wrapper import Config
 
 
 class KMerger():
@@ -12,16 +16,19 @@ class KMerger():
     K-way merger for sorted posting lists stored on disk
     """
 
-    def __init__(self, block_path: str, fields: List[str] = ["all"]):
+    def __init__(self, block_path: str, fields: List[str] = ["all"], cfg: Optional[DictConfig] = None):
+        if cfg is None:
+            cfg = Config(load=True)
+        self.cfg = cfg
 
         self.block_paths: dict[str, str] = {}
         self.blockIOs: dict[str, BlockIO] = {}
         self.storageManagers: dict[str, StorageManager] = {}
         for field in fields:
             self.block_paths[field] = block_path + (f"{field}/" if field is not None else "")
-            self.blockIOs[field] = BlockIO(field=field)
+            self.blockIOs[field] = BlockIO(cfg=cfg, field=field)
             self.storageManagers[field] = StorageManager(
-                rewrite=True, rewrite_doc_dict=False, field=field
+                rewrite=True, rewrite_doc_dict=False, field=field, cfg=cfg
             )
 
     def merge_blocks(self):

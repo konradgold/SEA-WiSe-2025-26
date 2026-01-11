@@ -67,11 +67,11 @@ class Worker:
         if fields is None:
             fields = ["all"]
         self.fields = fields
-        self.blockIOs: Dict[str, BlockIO] = {}
-        for field in self.fields:
-            self.blockIOs[field] = BlockIO(field=field)
         if cfg is None:
             cfg = Config(load=True)
+        self.blockIOs: Dict[str, BlockIO] = {}
+        for field in self.fields:
+            self.blockIOs[field] = BlockIO(cfg=cfg, field=field)
         self.tokenizer = get_tokenizer(cfg)
 
     # public entry point used by the parent to process one batch
