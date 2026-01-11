@@ -1,23 +1,53 @@
 """
 Pre-compute LTR features and save to .npz for fast training.
 
-This script is optimized for single-process execution with efficient I/O batching.
-Multiprocessing was causing disk contention during worker initialization.
+Supports multiprocessing for significant speedup on multi-core machines.
+Use --workers to control parallelism (default: number of CPUs - 2).
 """
 import argparse
+import multiprocessing as mp
+import os
 import numpy as np
 from pathlib import Path
 import random
 import sys
 import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.features import FeatureExtractor
 from sea.utils.config_wrapper import Config
 
+# Worker-local state (initialized once per process)
+_retriever = None
+_fe = None
 
-def sample_list_for_query(
+
+def _init_worker():
+    """Initialize retriever and feature extractor once per worker process."""
+    global _retriever, _fe
+    cfg = Config(load=True)
+    cfg.SEARCH.VERBOSE_OUTPUT = False
+    _retriever = BM25Retriever.from_config(cfg)
+    _fe = FeatureExtractor.from_config(cfg)
+
+
+def _process_query(args_tuple):
+    """Process a single query in a worker process."""
+    qid, query, positives_internal, candidate_topn, list_size, seed = args_tuple
+
+    id_results = _retriever.retrieve_ids(query, topn=candidate_topn)
+    if not id_results:
+        return None
+
+    return _sample_list_for_query(
+        qid, query, id_results, positives_internal,
+        _retriever, _fe, list_size, seed
+    )
+
+
+def _sample_list_for_query(
     qid: int,
     query: str,
     id_results: list[tuple[int, float]],
@@ -64,8 +94,42 @@ def sample_list_for_query(
 
     labels = np.array([1.0 if p[0] == pos_id else 0.0 for p in chosen_pairs], dtype=np.float32)
     features = fe.extract_many(query, docs).astype(np.float32, copy=False)
-    
+
     return features, labels
+
+
+def _run_extraction(work_items, num_workers):
+    """Run feature extraction with single or multiple workers."""
+    all_features = []
+    all_labels = []
+    skipped = 0
+
+    if num_workers == 1:
+        _init_worker()
+        for item in tqdm.tqdm(work_items, desc="Extracting features"):
+            result = _process_query(item)
+            if result:
+                all_features.append(result[0])
+                all_labels.append(result[1])
+            else:
+                skipped += 1
+    else:
+        mp_ctx = mp.get_context("spawn" if os.uname().sysname == "Darwin" else "forkserver")
+        with ProcessPoolExecutor(max_workers=num_workers, mp_context=mp_ctx, initializer=_init_worker) as executor:
+            futures = [executor.submit(_process_query, item) for item in work_items]
+            for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Extracting features"):
+                try:
+                    result = future.result()
+                    if result:
+                        all_features.append(result[0])
+                        all_labels.append(result[1])
+                    else:
+                        skipped += 1
+                except Exception as e:
+                    print(f"Worker error: {e}")
+                    skipped += 1
+
+    return all_features, all_labels, skipped
 
 
 def main():
@@ -91,6 +155,7 @@ def main():
     ap.add_argument("--candidate-topn", type=int, default=cfg.LTR.CANDIDATE_TOPN if hasattr(cfg, "LTR") else 200)
     ap.add_argument("--seed", type=int, default=cfg.LTR.SEED if hasattr(cfg, "LTR") else 42)
     ap.add_argument("--force", action="store_true", help="Overwrite existing output file")
+    ap.add_argument("--workers", type=int, default=0, help="Number of worker processes (0 = auto, 1 = single-process)")
     args = ap.parse_args()
 
     if not (args.queries and args.qrels and args.split_file):
@@ -103,6 +168,12 @@ def main():
         print("\nUse --force to overwrite existing file.")
         sys.exit(1)
 
+    # Determine number of workers
+    if args.workers == 0:
+        num_workers = max(1, (os.cpu_count() or 4) - 2)
+    else:
+        num_workers = args.workers
+
     print("Loading queries and qrels...")
     queries = load_queries_map(args.queries)
     qrels = load_qrels_map(args.qrels)
@@ -111,12 +182,12 @@ def main():
     if args.limit > 0:
         qids = qids[:args.limit]
 
+    # Load retriever in main process to get doc metadata mapping
+    print("Initializing retriever for qrels mapping...")
     retriever = BM25Retriever.from_config(cfg)
-    fe = FeatureExtractor.from_config(cfg)
 
     # Convert qrels to internal IDs once (avoids repeated lookups)
     print("Mapping qrels to internal IDs...")
-    # Use the first available storage manager to get doc metadata
     storage_mgr = next(iter(retriever.ranker.storage_managers.values()))
     doc_metadata = storage_mgr.getDocMetadata()
     if not doc_metadata:
@@ -130,47 +201,19 @@ def main():
         if internal_ids:
             qrels_internal[qid] = internal_ids
 
-    all_features = []
-    all_labels = []
-    skipped = 0
+    # Build work items
+    work_items = [
+        (qid, queries[qid], qrels_internal[qid], args.candidate_topn, args.list_size, args.seed)
+        for qid in qids
+        if qid in queries and qid in qrels_internal
+    ]
 
-    print(f"Processing {len(qids)} queries...")
-    for qid in tqdm.tqdm(qids, desc="Extracting features"):
-        query = queries.get(qid)
-        positives_internal = qrels_internal.get(qid)
+    print(f"Processing {len(work_items)} queries with {num_workers} workers...")
 
-        if query is None or not positives_internal:
-            skipped += 1
-            continue
-
-        # Retrieve candidate IDs (fast, no document content loaded)
-        id_results = retriever.retrieve_ids(query, topn=args.candidate_topn)
-        if not id_results:
-            skipped += 1
-            continue
-
-        # Sample and extract features
-        result = sample_list_for_query(
-            qid=qid,
-            query=query,
-            id_results=id_results,
-            positives_internal=positives_internal,
-            retriever=retriever,
-            fe=fe,
-            list_size=args.list_size,
-            seed=args.seed,
-        )
-
-        if result is None:
-            skipped += 1
-            continue
-
-        features, labels = result
-        all_features.append(features)
-        all_labels.append(labels)
+    all_features, all_labels, skipped = _run_extraction(work_items, num_workers)
 
     if not all_features:
-        print(f"Error: No samples generated from {len(qids)} queries (skipped {skipped}).")
+        print(f"Error: No samples generated from {len(work_items)} queries (skipped {skipped}).")
         return
 
     print(f"Generated {len(all_features)} samples (skipped {skipped} queries)")
