@@ -32,7 +32,7 @@ class Ingestion:
 
     def ingest(self, num_documents: int = 1000, batch_size: int = 500, fields: Optional[List[str]] = None):
         # TODO: adjust batch size based on L1 cache size of CPU
-        if batch_size > num_documents or batch_size <= 0:
+        if num_documents > 0 and (batch_size > num_documents or batch_size <= 0):
             batch_size = num_documents
 
         metadata = dict()
@@ -56,7 +56,7 @@ class Ingestion:
 
         def submit_next(ex):
             nonlocal submitted
-            if  counter.value >= num_documents:
+            if num_documents > 0 and counter.value >= num_documents:
                 return None
             try:
                 lines = next(batch_iter)
@@ -64,10 +64,14 @@ class Ingestion:
                 return None
             fut = ex.submit(process_batch, f"{submitted}", lines)
             submitted += 1
-            print(f"Docs {counter.value:,} / {num_documents:,} submitted for processing.")
+            if num_documents > 0:
+                print(f"Docs {counter.value:,} / {num_documents:,} submitted for processing.")
+            else:
+                print(f"Docs {counter.value:,} submitted for processing.")
             return fut
 
-        print(f"Starting ingestion of {num_documents} documents from {self.document_path}...")
+        doc_msg = "all documents" if num_documents < 0 else f"{num_documents} documents"
+        print(f"Starting ingestion of {doc_msg} from {self.document_path}...")
         with open(self.document_path, "r") as f:
             batch_iter = self._chunked_lines(f, batch_size, counter)
             timings = []

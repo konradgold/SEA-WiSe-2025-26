@@ -103,7 +103,7 @@ def save_checkpoint(data_path: str, completed_docs: int, partial_path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Compute document embeddings")
-    parser.add_argument("--num_docs", type=int, default=32000, help="Total documents to embed")
+    parser.add_argument("--num_docs", type=int, default=-1, help="Total documents to embed (-1 for all)")
     parser.add_argument("--batch_size", type=int, help="Batch size (default from config)")
     parser.add_argument("--checkpoint_every", type=int, default=50000, help="Save checkpoint every N docs")
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint")
@@ -146,7 +146,14 @@ def main():
         print(f"Loading partial embeddings from {partial_path}...")
         all_embeddings.append(np.load(partial_path))
 
+    # Count total docs if needed
     total_docs = args.num_docs
+    if total_docs < 0:
+        print("Counting documents in corpus...")
+        with open(docs_path, "r", encoding="utf-8") as f:
+            total_docs = sum(1 for _ in f)
+        print(f"Found {total_docs:,} documents")
+
     pbar = tqdm.tqdm(total=total_docs, initial=start_doc, desc="Embedding docs")
 
     t0 = perf_counter()

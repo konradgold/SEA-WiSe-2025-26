@@ -76,7 +76,7 @@ class BM25Config:
 
 @dataclass
 class IngestionConfig:
-    NUM_DOCUMENTS: int = 32000
+    NUM_DOCUMENTS: int = -1
     BATCH_SIZE: int = 1000
 
 @dataclass

@@ -12,14 +12,14 @@ from sea.ranking.utils import Document, RankingRegistry
 from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
 from sea.storage.manager import StorageManager
 
-def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=3_300_000):
+def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=-1):
     offsets = []
     with open(tsv_path, 'rb') as index:
         offsets.append(0)
         for i, line in tqdm.tqdm(enumerate(index, 1)):
             if i % interval == 0:
                 offsets.append(index.tell())
-            if i >= limit:
+            if limit > 0 and i >= limit:
                 break
     
     with open(index_path, 'wb') as index:

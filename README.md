@@ -37,7 +37,7 @@ uv run python -m sea.ingest.pipeline
 This parses documents, writes intermediate blocks to `data/blocks/`, then merges them into the final index files. Use `--force` to overwrite existing index files.
 
 Configuration in `configs/base.yaml`:
-- `INGESTION.NUM_DOCUMENTS`: number of documents to index
+- `INGESTION.NUM_DOCUMENTS`: number of documents to index (-1 for all)
 - `INGESTION.BATCH_SIZE`: batch size for parallel processing
 - `SEARCH.FIELDED.ACTIVE`: enable fielded indexing (title/body/url)
 
@@ -81,9 +81,9 @@ uv run python -m sea.semantic.service
 
 2. Compute document embeddings (one-time):
 ```bash
-uv run python -m sea.semantic.index_cli --num_docs 32000
+uv run python -m sea.semantic.index_cli
 ```
-Use `--force` to overwrite existing embeddings, `--resume` to continue from checkpoint.
+Use `--num_docs N` to limit, `--force` to overwrite, `--resume` to continue from checkpoint.
 
 3. Enable semantic search in config:
 ```yaml

@@ -65,7 +65,7 @@ BM25:
   B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 32000
+  NUM_DOCUMENTS: -1  # -1 = all documents, or specify a limit
   BATCH_SIZE: 1000
 
 QUERY:
