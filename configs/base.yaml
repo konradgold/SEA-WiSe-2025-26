@@ -28,18 +28,17 @@ HEADER_DOC_DICT_FILE: "SEAD\x01"
 LOG_PATH: "data/log.txt"
 
 SEARCH:
+  RETRIEVAL: "semantic"  # "bm25" or "semantic"
   MAX_RESULTS: 10
-  POSTINGS_CUT: 1000 # limits number of postings read per term
-  EXPAND_QUERIES: true
-  RANKING: "bm25" # options: "tfidf", "bm25", none
+  POSTINGS_CUT: 1000
+  EXPAND_QUERIES: false  # SPLADE query expansion (only for bm25)
   NUM_DOCS: 32000
   AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: true
   RERANKER:
-    ENABLED: true
+    ENABLED: false  # LTR reranker on top of retrieval
     MODEL_PATH: "artifacts/tfr_reranker/model.keras"
     CANDIDATE_TOPN: 200
-    TOPK: 10
   FIELDED:
     ACTIVE: true
     FIELDS: ["title", "body", "url"]
@@ -51,6 +50,14 @@ SEARCH:
       title: 2.0
       body: 1.0
       url: 1.5
+
+SEMANTIC:
+  SERVICE_URL: "http://localhost:8001"
+  SERVICE_PORT: 8001
+  MODEL_ID: "nomic-ai/nomic-embed-text-v1.5"
+  DIM: 64
+  DEVICE: "mps"
+  BATCH_SIZE: 16  # for indexing
 
 
 BM25:
