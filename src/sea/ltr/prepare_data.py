@@ -8,6 +8,7 @@ import argparse
 import numpy as np
 from pathlib import Path
 import random
+import sys
 import tqdm
 
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
@@ -89,10 +90,18 @@ def main():
     ap.add_argument("--list-size", type=int, default=cfg.LTR.LIST_SIZE if hasattr(cfg, "LTR") else 100)
     ap.add_argument("--candidate-topn", type=int, default=cfg.LTR.CANDIDATE_TOPN if hasattr(cfg, "LTR") else 200)
     ap.add_argument("--seed", type=int, default=cfg.LTR.SEED if hasattr(cfg, "LTR") else 42)
+    ap.add_argument("--force", action="store_true", help="Overwrite existing output file")
     args = ap.parse_args()
 
     if not (args.queries and args.qrels and args.split_file):
         ap.error("Must provide --queries, --qrels, and --split-file (or define in base.yaml).")
+
+    # Check if output file already exists
+    out_path = Path(args.out)
+    if out_path.exists() and not args.force:
+        print(f"Error: Output file already exists: {args.out}")
+        print("\nUse --force to overwrite existing file.")
+        sys.exit(1)
 
     print("Loading queries and qrels...")
     queries = load_queries_map(args.queries)

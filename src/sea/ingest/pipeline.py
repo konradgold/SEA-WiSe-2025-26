@@ -1,6 +1,8 @@
+import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 import os
+import sys
 from time import perf_counter
 from types import SimpleNamespace
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -194,15 +196,47 @@ def assert_doc_structure(cfg: DictConfig) -> None:
         os.makedirs(os.path.join(cfg.BLOCK_PATH, field), exist_ok=True)
 
 
+def check_existing_index(cfg: DictConfig, fields: List[str]) -> List[str]:
+    """Check for existing index files. Returns list of existing file paths."""
+    existing = []
+    # Check for block files
+    for field in fields:
+        block_dir = os.path.join(cfg.BLOCK_PATH, field)
+        if os.path.exists(block_dir) and os.listdir(block_dir):
+            existing.append(block_dir)
+    # Check for merged index files
+    index_file = os.path.join(cfg.DATA_PATH, "index.bin")
+    if os.path.exists(index_file):
+        existing.append(index_file)
+    posting_file = os.path.join(cfg.DATA_PATH, "posting.bin")
+    if os.path.exists(posting_file):
+        existing.append(posting_file)
+    return existing
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Run document ingestion pipeline")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing index files")
+    args = parser.parse_args()
+
     start = perf_counter()
     cfg = Config(load=True)
-    ingestion = Ingestion(cfg.DOCUMENTS)
 
     if cfg.SEARCH.FIELDED.ACTIVE:
         fields = cfg.SEARCH.FIELDED.FIELDS
     else:
         fields = ["all"]
+
+    # Check for existing files
+    existing = check_existing_index(cfg, fields)
+    if existing and not args.force:
+        print("Error: Index files already exist:")
+        for path in existing:
+            print(f"  - {path}")
+        print("\nUse --force to overwrite existing files.")
+        sys.exit(1)
+
+    ingestion = Ingestion(cfg.DOCUMENTS)
     assert_doc_structure(cfg)
     no_of_terms = 0
     merge_timing = 0.0

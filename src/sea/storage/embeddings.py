@@ -39,13 +39,16 @@ class EmbeddingIO:
     def _get_path(self) -> str:
         return os.path.join(self.data_path, "embeddings.bin")
 
-    def write(self, embeddings: np.ndarray) -> None:
+    def write(self, embeddings: np.ndarray, force: bool = False) -> None:
         """Write embeddings to binary file."""
         if embeddings.dtype != np.float32:
             embeddings = embeddings.astype(np.float32)
 
         num_docs, dim = embeddings.shape
         path = self._get_path()
+
+        if os.path.exists(path) and not force:
+            raise FileExistsError(f"Embeddings file already exists: {path}")
 
         with open(path, "wb") as f:
             f.write(HEADER_EMBEDDING_FILE)

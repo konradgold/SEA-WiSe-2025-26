@@ -13,6 +13,7 @@ Usage:
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 from time import perf_counter
 
@@ -106,9 +107,18 @@ def main():
     parser.add_argument("--batch_size", type=int, help="Batch size (default from config)")
     parser.add_argument("--checkpoint_every", type=int, default=50000, help="Save checkpoint every N docs")
     parser.add_argument("--resume", action="store_true", help="Resume from checkpoint")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing embeddings file")
     args = parser.parse_args()
 
     cfg = Config(load=True)
+
+    # Check for existing embeddings file 
+    if not args.resume:
+        embeddings_path = os.path.join(cfg.DATA_PATH, "embeddings.bin")
+        if os.path.exists(embeddings_path) and not args.force:
+            print(f"Error: Embeddings file already exists: {embeddings_path}")
+            print("\nUse --force to overwrite existing file, or --resume to continue from checkpoint.")
+            sys.exit(1)
     model_id = cfg.SEMANTIC.MODEL_ID
     device = cfg.SEMANTIC.DEVICE
     dim = cfg.SEMANTIC.DIM
@@ -176,7 +186,7 @@ def main():
 
     # Write to binary format
     embedding_io = EmbeddingIO(cfg)
-    embedding_io.write(final_embeddings)
+    embedding_io.write(final_embeddings, force=args.force or args.resume)
 
     # Clean up checkpoint
     checkpoint_path = get_checkpoint_path(data_path)
