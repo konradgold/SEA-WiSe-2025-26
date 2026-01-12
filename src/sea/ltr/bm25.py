@@ -21,10 +21,10 @@ class BM25Retriever:
     ranker: RankerAdapter
 
     @classmethod
-    def from_config(cls, cfg: DictConfig | None = None) -> "BM25Retriever":
+    def from_config(cls, cfg: DictConfig | None = None, num_threads: int | None = None) -> "BM25Retriever":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
-        ranker = build_bm25_ranker(cfg)
+        ranker = build_bm25_ranker(cfg, num_threads=num_threads)
         return cls(cfg=cfg, tokenizer=tokenizer, ranker=ranker)
 
     def retrieve(self, query: str, *, topn: int) -> list[Document]:

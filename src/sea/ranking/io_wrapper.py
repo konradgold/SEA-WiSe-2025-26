@@ -29,7 +29,7 @@ def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=-1):
 
 class RankerAdapter(abc.ABC):
 
-    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None):
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
@@ -62,14 +62,18 @@ class RankerAdapter(abc.ABC):
                 index_path=cfg.DOCUMENT_OFFSETS,
                 limit=cfg.INGESTION.NUM_DOCUMENTS
             )
-                                        
+
         self.interval = cfg.INDEX_INTERVAL
-        cpu_count = os.cpu_count()
-        if cpu_count is None or cpu_count <=2:
-            self.num_threads = 1
+        if num_threads is not None:
+            self.num_threads = num_threads
         else:
-            self.num_threads = cpu_count - 2
-        print(f"Using {self.num_threads} threads for document reading.")
+            cpu_count = os.cpu_count()
+            if cpu_count is None or cpu_count <= 2:
+                self.num_threads = 1
+            else:
+                self.num_threads = cpu_count - 2
+        if self.num_threads > 1 and cfg.SEARCH.VERBOSE_OUTPUT:
+            print(f"Using {self.num_threads} threads for document reading.")
 
     def __call__(self, tokens: list) -> list[Document]:
         return self._retrieve_and_rank(tokens)
@@ -187,6 +191,9 @@ class RankerAdapter(abc.ABC):
 
 class TFIDF(RankerAdapter):
 
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
+        super().__init__(ranker, cfg, num_threads)
+
     def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, list[int]]:
         pos_list = pl.tolist()
         if not pos_list:
@@ -200,7 +207,10 @@ class TFIDF(RankerAdapter):
             i += 2 # Assuming that positions are not stored
         return posting_dict
 
-class BM25(RankerAdapter):     
+class BM25(RankerAdapter):
+
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
+        super().__init__(ranker, cfg, num_threads)
 
     def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, tuple[int, int]]:
         pos_list = pl.tolist()
@@ -230,18 +240,18 @@ class BM25(RankerAdapter):
 RankersRegistry = RankingRegistry()
 
 
-def bm25(cfg: Optional[DictConfig] = None):
+def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
     if cfg is None:
         cfg = Config(load=True)
     ranker = BM25Ranking(cfg)
-    return BM25(ranker, cfg=cfg)
+    return BM25(ranker, cfg=cfg, num_threads=num_threads)
 
 
-def tfidf(cfg: Optional[DictConfig] = None):
+def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
     if cfg is None:
         cfg = Config(load=True)
     ranker = TFIDFRanking(cfg)
-    return TFIDF(ranker, cfg=cfg)
+    return TFIDF(ranker, cfg=cfg, num_threads=num_threads)
 
 
 RankersRegistry.register("bm25", bm25)

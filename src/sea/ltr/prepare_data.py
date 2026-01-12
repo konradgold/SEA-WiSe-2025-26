@@ -12,7 +12,6 @@ from pathlib import Path
 import random
 import sys
 import tqdm
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
@@ -25,11 +24,15 @@ _fe = None
 
 
 def _init_worker():
-    """Initialize retriever and feature extractor once per worker process."""
+    """Initialize retriever and feature extractor once per worker process.
+
+    Uses num_threads=1 to avoid nested parallelism (processes already parallelize work).
+    """
     global _retriever, _fe
     cfg = Config(load=True)
     cfg.SEARCH.VERBOSE_OUTPUT = False
-    _retriever = BM25Retriever.from_config(cfg)
+    # Use single thread per worker to avoid oversubscription (N processes × M threads)
+    _retriever = BM25Retriever.from_config(cfg, num_threads=1)
     _fe = FeatureExtractor.from_config(cfg)
 
 
@@ -99,7 +102,11 @@ def _sample_list_for_query(
 
 
 def _run_extraction(work_items, num_workers):
-    """Run feature extraction with single or multiple workers."""
+    """Run feature extraction with single or multiple workers.
+
+    Uses Pool.imap_unordered with chunking for efficient batched processing
+    and smooth progress bar updates.
+    """
     all_features = []
     all_labels = []
     skipped = 0
@@ -114,19 +121,18 @@ def _run_extraction(work_items, num_workers):
             else:
                 skipped += 1
     else:
+        # Use Pool.imap_unordered for efficient batched processing
+        # chunksize batches work items to reduce IPC overhead
         mp_ctx = mp.get_context("spawn" if os.uname().sysname == "Darwin" else "forkserver")
-        with ProcessPoolExecutor(max_workers=num_workers, mp_context=mp_ctx, initializer=_init_worker) as executor:
-            futures = [executor.submit(_process_query, item) for item in work_items]
-            for future in tqdm.tqdm(as_completed(futures), total=len(futures), desc="Extracting features"):
-                try:
-                    result = future.result()
-                    if result:
-                        all_features.append(result[0])
-                        all_labels.append(result[1])
-                    else:
-                        skipped += 1
-                except Exception as e:
-                    print(f"Worker error: {e}")
+        chunksize = max(1, len(work_items) // (num_workers * 10))
+
+        with mp_ctx.Pool(processes=num_workers, initializer=_init_worker) as pool:
+            results_iter = pool.imap_unordered(_process_query, work_items, chunksize=chunksize)
+            for result in tqdm.tqdm(results_iter, total=len(work_items), desc="Extracting features"):
+                if result:
+                    all_features.append(result[0])
+                    all_labels.append(result[1])
+                else:
                     skipped += 1
 
     return all_features, all_labels, skipped
