@@ -31,6 +31,45 @@ from sea.utils.config_wrapper import Config
 MAX_CHARS = 2048
 
 
+def detect_device(requested: str) -> str:
+    """Auto-detect the best available device for PyTorch.
+
+    Args:
+        requested: Device from config ("auto", "cuda", "cuda:0", "mps", "cpu")
+
+    Returns:
+        Validated device string that is actually available.
+    """
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        else:
+            return "cpu"
+
+    # Validate requested device is available
+    if requested.startswith("cuda"):
+        if not torch.cuda.is_available():
+            print(f"Warning: CUDA requested but not available. Falling back to CPU.")
+            return "cpu"
+        # Check specific device index if provided (e.g., "cuda:1")
+        if ":" in requested:
+            device_idx = int(requested.split(":")[1])
+            if device_idx >= torch.cuda.device_count():
+                print(f"Warning: {requested} not available (only {torch.cuda.device_count()} GPUs). Using cuda:0.")
+                return "cuda:0"
+        return requested
+
+    if requested == "mps":
+        if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+            print(f"Warning: MPS requested but not available. Falling back to CPU.")
+            return "cpu"
+        return requested
+
+    return requested  # cpu or unknown
+
+
 def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[int, str]]:
     """Read a batch of documents starting at row `start`."""
     docs = []
@@ -120,7 +159,8 @@ def main():
             print("\nUse --force to overwrite existing file, or --resume to continue from checkpoint.")
             sys.exit(1)
     model_id = cfg.SEMANTIC.MODEL_ID
-    device = cfg.SEMANTIC.DEVICE
+    requested_device = cfg.SEMANTIC.DEVICE
+    device = detect_device(requested_device)
     dim = cfg.SEMANTIC.DIM
     batch_size = args.batch_size or cfg.SEMANTIC.BATCH_SIZE
     docs_path = cfg.DOCUMENTS

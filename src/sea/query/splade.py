@@ -1,7 +1,44 @@
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 import torch
 
-DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+
+def detect_device(requested: str) -> str:
+    """Auto-detect the best available device for PyTorch.
+
+    Args:
+        requested: Device from config ("auto", "cuda", "cuda:0", "mps", "cpu")
+
+    Returns:
+        Validated device string that is actually available.
+    """
+    if requested == "auto":
+        if torch.cuda.is_available():
+            return "cuda"
+        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            return "mps"
+        else:
+            return "cpu"
+
+    # Validate requested device is available
+    if requested.startswith("cuda"):
+        if not torch.cuda.is_available():
+            print(f"Warning: CUDA requested but not available. Falling back to CPU.")
+            return "cpu"
+        # Check specific device index if provided (e.g., "cuda:1")
+        if ":" in requested:
+            device_idx = int(requested.split(":")[1])
+            if device_idx >= torch.cuda.device_count():
+                print(f"Warning: {requested} not available (only {torch.cuda.device_count()} GPUs). Using cuda:0.")
+                return "cuda:0"
+        return requested
+
+    if requested == "mps":
+        if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+            print(f"Warning: MPS requested but not available. Falling back to CPU.")
+            return "cpu"
+        return requested
+
+    return requested  # cpu or unknown
 
 
 class SpladeEncoder:
@@ -11,7 +48,8 @@ class SpladeEncoder:
         model_id = cfg.SPLADE.MODEL_ID if cfg else 'naver/splade-cocondenser-ensembledistil'
         self.cutoff = cfg.SPLADE.CAP_EXPANSION if cfg else 3
         cache_dir = cfg.SPLADE.CACHE_DIR if cfg else None
-        self.device = DEVICE
+        requested_device = cfg.SPLADE.DEVICE if cfg else "auto"
+        self.device = detect_device(requested_device)
         self.threshold = cfg.SPLADE.THRESHOLD if cfg else 0.0
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, device=self.device, cache_dir=cache_dir)
         self.model = AutoModelForMaskedLM.from_pretrained(model_id, cache_dir=cache_dir).to(self.device)
