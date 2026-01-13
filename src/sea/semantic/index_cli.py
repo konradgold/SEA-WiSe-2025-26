@@ -107,6 +107,7 @@ def compute_embeddings_batch(
         # Use model's native encoding with truncation
         emb = model.encode(
             batch,
+            batch_size=batch_size,
             convert_to_tensor=True,
             show_progress_bar=False,
             normalize_embeddings=False,  # We normalize after Matryoshka truncation
@@ -120,6 +121,32 @@ def compute_embeddings_batch(
         all_embeddings.append(emb.cpu().numpy())
 
     return np.vstack(all_embeddings).astype(np.float32)
+
+
+def compute_embeddings_batches(
+    model: SentenceTransformer,
+    texts: list[str],
+    dim: int,
+    batch_size: int,
+):
+    """Yield normalized Matryoshka embeddings in batches (for live progress + checkpointing)."""
+    prefixed = ["search_document: " + t for t in texts]
+
+    for i in range(0, len(prefixed), batch_size):
+        batch = prefixed[i : i + batch_size]
+        emb = model.encode(
+            batch,
+            batch_size=batch_size,
+            convert_to_tensor=True,
+            show_progress_bar=False,
+            normalize_embeddings=False,
+        )
+
+        emb = F.layer_norm(emb, normalized_shape=(emb.shape[1],))
+        emb = emb[:, :dim]
+        emb = F.normalize(emb, p=2, dim=1)
+
+        yield emb.cpu().numpy().astype(np.float32)
 
 
 def get_checkpoint_path(data_path: str) -> Path:
@@ -151,7 +178,7 @@ def main():
 
     cfg = Config(load=True)
 
-    # Check for existing embeddings file 
+    # Check for existing embeddings file
     if not args.resume:
         embeddings_path = os.path.join(cfg.DATA_PATH, "embeddings.bin")
         if os.path.exists(embeddings_path) and not args.force:
@@ -198,6 +225,7 @@ def main():
 
     t0 = perf_counter()
     current_doc = start_doc
+    next_checkpoint = ((current_doc // chunk_size) + 1) * chunk_size
 
     while current_doc < total_docs:
         # Read chunk
@@ -208,22 +236,30 @@ def main():
             break
 
         texts = [text for _, text in docs]
-        embeddings = compute_embeddings_batch(model, texts, dim, batch_size)
-        all_embeddings.append(embeddings)
 
-        current_doc += len(docs)
-        pbar.update(len(docs))
+        # Embed in smaller batches so tqdm and checkpointing advance continuously.
+        for emb_batch in compute_embeddings_batches(model, texts, dim, batch_size):
+            all_embeddings.append(emb_batch)
+            current_doc += emb_batch.shape[0]
+            pbar.update(emb_batch.shape[0])
 
-        # Save checkpoint
-        if current_doc < total_docs and current_doc % chunk_size == 0:
-            partial = np.vstack(all_embeddings)
-            partial_path = os.path.join(data_path, "embeddings_partial.npy")
-            np.save(partial_path, partial)
-            save_checkpoint(data_path, current_doc, partial_path)
-            elapsed = perf_counter() - t0
-            docs_per_sec = current_doc / elapsed
-            remaining = (total_docs - current_doc) / docs_per_sec
-            print(f"\nCheckpoint at {current_doc:,} docs. ETA: {remaining/60:.1f} min")
+            # Save checkpoint when crossing scheduled boundaries
+            if current_doc < total_docs and current_doc >= next_checkpoint:
+                partial = np.vstack(all_embeddings)
+                partial_path = os.path.join(data_path, "embeddings_partial.npy")
+                np.save(partial_path, partial)
+                save_checkpoint(data_path, current_doc, partial_path)
+                elapsed = perf_counter() - t0
+                docs_per_sec = current_doc / elapsed if elapsed > 0 else 0.0
+                remaining = (
+                    (total_docs - current_doc) / docs_per_sec
+                    if docs_per_sec > 0
+                    else float("inf")
+                )
+                print(
+                    f"\nCheckpoint at {current_doc:,} docs. ETA: {remaining/60:.1f} min"
+                )
+                next_checkpoint += chunk_size
 
     pbar.close()
 
