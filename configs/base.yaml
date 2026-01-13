@@ -28,7 +28,7 @@ HEADER_DOC_DICT_FILE: "SEAD\x01"
 LOG_PATH: "data/log.txt"
 
 SEARCH:
-  RETRIEVAL: "semantic"  # "bm25" or "semantic"
+  RETRIEVAL: "bm25"  # "bm25" or "semantic"
   MAX_RESULTS: 10
   POSTINGS_CUT: 1000
   EXPAND_QUERIES: false  # SPLADE query expansion (only for bm25)
@@ -36,7 +36,7 @@ SEARCH:
   AVG_DOC_LEN: 100.0
   VERBOSE_OUTPUT: true
   RERANKER:
-    ENABLED: false  # LTR reranker on top of retrieval
+    ENABLED: true  # LTR reranker on top of retrieval
     MODEL_PATH: "artifacts/tfr_reranker/model.keras"
     CANDIDATE_TOPN: 200
   FIELDED:
@@ -56,8 +56,8 @@ SEMANTIC:
   SERVICE_PORT: 8001
   MODEL_ID: "nomic-ai/nomic-embed-text-v1.5"
   DIM: 64
-  DEVICE: "mps"
-  BATCH_SIZE: 16  # for indexing
+  DEVICE: "auto"  # options: "auto", "cuda", "cuda:0", "mps", "cpu"
+  BATCH_SIZE: 16  # for indexing; increase for better GPU utilization
 
 
 BM25:
@@ -66,14 +66,14 @@ BM25:
 
 INGESTION:
   NUM_DOCUMENTS: -1  # -1 = all documents, or specify a limit
-  BATCH_SIZE: 1000
+  BATCH_SIZE: 10000
 
 QUERY:
   MAX_PHRASE_LEN: 5
 
 SPLADE:
   MODEL_ID: "naver/splade-cocondenser-ensembledistil"
-  DEVICE: "cuda:0"  # options: "cpu", "cuda:0", etc.
+  DEVICE: "auto"  # options: "auto", "cuda", "cuda:0", "mps", "cpu"
   THRESHOLD: 0.01
   CACHE_DIR: "cache/splade"
   CAP_EXPANSION: 2
