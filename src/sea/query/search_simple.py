@@ -10,6 +10,74 @@ from sea.utils.chunker import Chunker
 from sea.utils.config_wrapper import Config
 
 
+def build_search_components(cfg):
+    """Build search components based on configuration.
+
+    Returns a dict with the initialized components and strategy string.
+    """
+    components = {
+        "retriever": None,
+        "semantic_searcher": None,
+        "bm25_retriever": None,
+        "reranker": None,
+        "splade_encoder": None,
+        "candidate_topn": None,
+    }
+    strategy_parts = []
+
+    if cfg.SEARCH.RETRIEVAL == "semantic":
+        from sea.ltr.bm25 import BM25Retriever
+        from sea.semantic.search import SemanticSearcher
+
+        components["semantic_searcher"] = SemanticSearcher(cfg=cfg, verbose=cfg.SEARCH.VERBOSE_OUTPUT)
+        components["bm25_retriever"] = BM25Retriever.from_config(cfg)
+        strategy_parts.append("Semantic")
+    else:
+        components["retriever"] = bm25(cfg)
+        strategy_parts.append("BM25")
+
+        if cfg.SEARCH.EXPAND_QUERIES:
+            from sea.query.splade import SpladeEncoder
+
+            components["splade_encoder"] = SpladeEncoder(cfg=cfg)
+            strategy_parts.append("SPLADE")
+
+    if getattr(cfg.SEARCH.RERANKER, "ENABLED", False):
+        from sea.ltr.serve_tfr import TFRReranker
+
+        components["reranker"] = TFRReranker.load(model_path=cfg.SEARCH.RERANKER.MODEL_PATH, cfg=cfg)
+        components["candidate_topn"] = cfg.SEARCH.RERANKER.CANDIDATE_TOPN
+        strategy_parts.append("LTR Reranker")
+
+    components["strategy"] = " + ".join(strategy_parts)
+    return components
+
+
+def execute_search(query, components, tokenizer, cfg):
+    """Execute search using the configured components.
+
+    Returns list of Document results.
+    """
+    final_query = query
+
+    if components["splade_encoder"] is not None:
+        final_query = " ".join(components["splade_encoder"].expand(query))
+
+    if components["reranker"] is not None:
+        return components["reranker"].rerank(
+            final_query,
+            candidate_topn=components["candidate_topn"],
+            topk=cfg.SEARCH.MAX_RESULTS
+        ), final_query
+
+    if components["semantic_searcher"] is not None:
+        results = components["semantic_searcher"].search(query, topn=cfg.SEARCH.MAX_RESULTS)
+        return components["bm25_retriever"].hydrate_docs(results), final_query
+
+    tokens = tokenizer.tokenize(final_query)
+    return components["retriever"](tokens), final_query
+
+
 def main():
     cfg = Config(load=True)
     history = InMemoryHistory()
@@ -17,46 +85,10 @@ def main():
     chunker = Chunker(cfg=cfg)
     tokenizer = get_tokenizer(cfg)
 
-    retrieval_method = cfg.SEARCH.RETRIEVAL  # "bm25" or "semantic"
-    reranker_enabled = getattr(cfg.SEARCH.RERANKER, "ENABLED", False)
-    topk = cfg.SEARCH.MAX_RESULTS
+    components = build_search_components(cfg)
+    print(f"Search strategy: {components['strategy']}")
+
     verbose = cfg.SEARCH.VERBOSE_OUTPUT
-
-    # Build retriever based on config
-    retriever = None
-    semantic_searcher = None
-    bm25_retriever = None
-    reranker = None
-    splade_encoder = None
-
-    if retrieval_method == "semantic":
-        from sea.ltr.bm25 import BM25Retriever
-        from sea.semantic.search import SemanticSearcher
-
-        semantic_searcher = SemanticSearcher(cfg=cfg, verbose=verbose)
-        bm25_retriever = BM25Retriever.from_config(cfg)
-        strategy = "Semantic"
-
-    else:  # bm25
-        retriever = bm25(cfg)
-        strategy = "BM25"
-
-        if cfg.SEARCH.EXPAND_QUERIES:
-            from sea.query.splade import SpladeEncoder
-
-            splade_encoder = SpladeEncoder(cfg=cfg)
-            strategy += " + SPLADE"
-
-    # Optional LTR reranker
-    if reranker_enabled:
-        model_path = cfg.SEARCH.RERANKER.MODEL_PATH
-        candidate_topn = cfg.SEARCH.RERANKER.CANDIDATE_TOPN
-        from sea.ltr.serve_tfr import TFRReranker
-
-        reranker = TFRReranker.load(model_path=model_path, cfg=cfg)
-        strategy += " + LTR Reranker"
-
-    print(f"Search strategy: {strategy}")
 
     while True:
         try:
@@ -70,27 +102,9 @@ def main():
             continue
 
         t0 = time.perf_counter()
-        final_query = query
-
-        # Apply SPLADE expansion if enabled (BM25 only)
-        if splade_encoder is not None:
-            final_query = " ".join(splade_encoder.expand(query))
-
-        # Retrieval
-        if reranker is not None:
-            # Reranker handles retrieval internally
-            documents = reranker.rerank(final_query, candidate_topn=candidate_topn, topk=topk)
-
-        elif semantic_searcher is not None:
-            results = semantic_searcher.search(query, topn=topk)
-            documents = bm25_retriever.hydrate_docs(results)
-
-        else:
-            # BM25 retrieval
-            tokens = tokenizer.tokenize(final_query)
-            documents = retriever(tokens)
-
+        documents, final_query = execute_search(query, components, tokenizer, cfg)
         elapsed = (time.perf_counter() - t0) * 1000
+
         history.append_string(query)
         chunker.set_query(final_query.split())
 

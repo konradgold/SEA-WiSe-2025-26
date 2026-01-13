@@ -1,30 +1,38 @@
 import abc
+import os
+import pickle
 from array import array
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import perf_counter
 from typing import List, Optional
-import pickle
-import tqdm
-from sea.utils.config_wrapper import Config
-from omegaconf import DictConfig
-import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from sea.ranking.utils import Document, RankingRegistry
-from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
-from sea.storage.manager import StorageManager
 
-def build_index(tsv_path, interval=1000, index_path='offsets.pkl', limit=-1):
-    offsets = []
-    with open(tsv_path, 'rb') as index:
-        offsets.append(0)
-        for i, line in tqdm.tqdm(enumerate(index, 1)):
+import tqdm
+from omegaconf import DictConfig
+
+from sea.ranking.ranking import BM25Ranking, Ranking, TFIDFRanking
+from sea.ranking.utils import Document, RankingRegistry
+from sea.storage.manager import StorageManager
+from sea.utils.config_wrapper import Config
+
+def build_index(tsv_path: str, interval: int = 1000, index_path: str = 'offsets.pkl', limit: int = -1) -> list[int]:
+    """Build an offset index for fast random access to TSV rows."""
+    offsets = [0]
+    with open(tsv_path, 'rb') as f:
+        for i, _ in tqdm.tqdm(enumerate(f, 1)):
             if i % interval == 0:
-                offsets.append(index.tell())
+                offsets.append(f.tell())
             if limit > 0 and i >= limit:
                 break
-    
-    with open(index_path, 'wb') as index:
-        pickle.dump(offsets, index)
+
+    with open(index_path, 'wb') as f:
+        pickle.dump(offsets, f)
     return offsets
+
+
+def get_default_thread_count() -> int:
+    """Calculate default thread count for parallel document reading."""
+    cpu_count = os.cpu_count() or 1
+    return max(1, cpu_count - 2)
 
 
 class RankerAdapter(abc.ABC):
@@ -33,28 +41,50 @@ class RankerAdapter(abc.ABC):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
-        self.max_results = cfg.SEARCH.MAX_RESULTS if cfg.SEARCH.MAX_RESULTS is not None else 10
-        self.cut = (
-            cfg.SEARCH.POSTINGS_CUT if cfg.SEARCH.POSTINGS_CUT is not None else 100
-        )
         self.cfg = cfg
-        if cfg.SEARCH.FIELDED.ACTIVE:
-            self.fields = cfg.SEARCH.FIELDED.FIELDS
-        else:
-            self.fields = ["all"]
+        self.max_results = cfg.SEARCH.MAX_RESULTS or 10
+        self.cut = cfg.SEARCH.POSTINGS_CUT or 100
+        self.fields = cfg.SEARCH.FIELDED.FIELDS if cfg.SEARCH.FIELDED.ACTIVE else ["all"]
+        self.interval = cfg.INDEX_INTERVAL
+
+        self._init_storage_managers(cfg)
+        self._init_offsets(cfg)
+
+        self.num_threads = num_threads if num_threads is not None else get_default_thread_count()
+        if self.num_threads > 1 and cfg.SEARCH.VERBOSE_OUTPUT:
+            print(f"Using {self.num_threads} threads for document reading.")
+
+    def _init_storage_managers(self, cfg: DictConfig) -> None:
+        """Initialize storage managers for each field."""
         self.storage_managers = {}
         for field in self.fields:
-            if field == "all":
-                field = None
-            storage_manager = StorageManager(rewrite=False, cfg=cfg, field=field)
+            storage_field = None if field == "all" else field
+            storage_manager = StorageManager(rewrite=False, cfg=cfg, field=storage_field)
             storage_manager.init_all()
-            if field is None:
-                field = "all"
             self.storage_managers[field] = storage_manager
+
+    def _init_offsets(self, cfg: DictConfig) -> None:
+        """Load or build document offsets index.
+
+        Automatically rebuilds if the existing offsets file doesn't cover
+        all documents in the index (e.g., if NUM_DOCUMENTS changed).
+        """
+        needs_rebuild = False
+
         if os.path.exists(cfg.DOCUMENT_OFFSETS):
-            with open(cfg.DOCUMENT_OFFSETS, 'rb') as index:
-                self.offsets = pickle.load(index)
+            with open(cfg.DOCUMENT_OFFSETS, 'rb') as f:
+                self.offsets = pickle.load(f)
+
+            # Check if offsets cover all docs in the index
+            max_doc_id = max(self.storage_managers[self.fields[0]].getDocMetadata().keys())
+            max_row_covered = (len(self.offsets) - 1) * cfg.INDEX_INTERVAL + cfg.INDEX_INTERVAL - 1
+            if max_doc_id > max_row_covered:
+                print(f"Offsets file stale (covers {max_row_covered} rows, need {max_doc_id}). Rebuilding...")
+                needs_rebuild = True
         else:
+            needs_rebuild = True
+
+        if needs_rebuild:
             print("Building document offsets index...")
             self.offsets = build_index(
                 tsv_path=cfg.DOCUMENTS,
@@ -63,32 +93,22 @@ class RankerAdapter(abc.ABC):
                 limit=cfg.INGESTION.NUM_DOCUMENTS
             )
 
-        self.interval = cfg.INDEX_INTERVAL
-        if num_threads is not None:
-            self.num_threads = num_threads
-        else:
-            cpu_count = os.cpu_count()
-            if cpu_count is None or cpu_count <= 2:
-                self.num_threads = 1
-            else:
-                self.num_threads = cpu_count - 2
-        if self.num_threads > 1 and cfg.SEARCH.VERBOSE_OUTPUT:
-            print(f"Using {self.num_threads} threads for document reading.")
-
     def __call__(self, tokens: list) -> list[Document]:
         return self._retrieve_and_rank(tokens)
 
     def _retrieve_and_rank(self, tokens: List[str]) -> list[Document]:
-        ranked_results: dict[int, float] = dict()
+        ranked_results: dict[int, float] = {}
         for field in self.fields:
             token_list = self._prepare_tokens(tokens, field=field)
-            if len(token_list) == 0:
+            if not token_list:
                 continue
             for doc_id, score in self.ranker(token_list, field=field).items():
                 ranked_results[doc_id] = ranked_results.get(doc_id, 0.0) + score
-        if len(ranked_results) == 0:
+
+        if not ranked_results:
             return []
-        results = sorted(ranked_results.items(), key=lambda item: item[1], reverse=True)[:self.max_results]
+
+        results = sorted(ranked_results.items(), key=lambda x: x[1], reverse=True)[:self.max_results]
         return self._read_documents(results)
 
     def _prepare_tokens(self, tokens: List[str], field: str) -> list:
@@ -103,75 +123,63 @@ class RankerAdapter(abc.ABC):
         return token_list
 
     def _get_lines(self, row_numbers: list[int]) -> List[List[str]]:
-        """Multithreaded batched version - divides sorted rows among threads"""
-
-        def fetch_batch(batch_rows):
-            """Each thread processes a batch sequentially with one file handle"""
-            results = {}
-            with open(self.cfg.DOCUMENTS, 'rb') as f:
-
-                for row_num in batch_rows:
-                    index = row_num // self.interval
-                    steps = row_num % self.interval
-
-                    f.seek(self.offsets[index]-f.tell(), 1)
-
-                    for _ in range(steps):
-                        f.readline()
-
-                    line = f.readline()
-                    results[row_num] = line.decode('utf-8').rstrip('\n').split('\t')
-
-            return results
-
+        """Read document lines using parallel threads."""
         t0 = perf_counter()
-
-        # Sort once
         sorted_rows = sorted(row_numbers)
 
-        # Divide into batches for each thread
+        # Divide rows among threads
+        batch_size = max(1, len(sorted_rows) // self.num_threads)
+        batches = [
+            sorted_rows[i:i + batch_size]
+            for i in range(0, len(sorted_rows), batch_size)
+        ]
 
-        batch_size = len(sorted_rows) // self.num_threads
-        batches = []
-
-        for i in range(self.num_threads):
-            start_idx = i * batch_size
-            end_idx = start_idx + batch_size if i < self.num_threads - 1 else len(sorted_rows)
-            if start_idx < len(sorted_rows):
-                batches.append(sorted_rows[start_idx:end_idx])
-        # Process batches in parallel
         all_results = {}
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
-            futures = [executor.submit(fetch_batch, batch) for batch in batches]
-
+            futures = [executor.submit(self._fetch_batch, batch) for batch in batches]
             for future in as_completed(futures):
-                batch_results = future.result()
-                all_results.update(batch_results)
+                all_results.update(future.result())
 
-        # Return in original order
-        documents_output = [all_results[i] for i in row_numbers]
+        documents_output = [all_results[row] for row in row_numbers]
 
         if self.cfg.SEARCH.VERBOSE_OUTPUT:
             elapsed = (perf_counter() - t0) * 1000
-            print(
-                f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)"
-            )
+            print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
 
         return documents_output
+
+    def _fetch_batch(self, batch_rows: list[int]) -> dict[int, list[str]]:
+        """Fetch a batch of document rows from disk."""
+        results = {}
+        max_row = (len(self.offsets) - 1) * self.interval + self.interval - 1
+        with open(self.cfg.DOCUMENTS, 'rb') as f:
+            for row_num in batch_rows:
+                index = row_num // self.interval
+                steps = row_num % self.interval
+
+                if index >= len(self.offsets):
+                    raise IndexError(
+                        f"Document row {row_num} exceeds offsets coverage (max ~{max_row}). "
+                        f"Delete {self.cfg.DOCUMENT_OFFSETS} to rebuild."
+                    )
+
+                f.seek(self.offsets[index] - f.tell(), 1)
+                for _ in range(steps):
+                    f.readline()
+
+                line = f.readline()
+                results[row_num] = line.decode('utf-8').rstrip('\n').split('\t')
+        return results
 
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
         if self.cfg.SEARCH.VERBOSE_OUTPUT:
             print(f"Reading {len(ranked_results)} documents from disk...")
 
-        # Save original order and map internal ID to score
-        id_to_score = {doc_id: score for doc_id, score in ranked_results}
+        id_to_score = dict(ranked_results)
         row_numbers = [doc_id for doc_id, _ in ranked_results]
-
-        # Fetch documents from disk (this might return them in different order depending on implementation,
-        # but RankerAdapter._get_lines is supposed to return them in the order of row_numbers)
         documents_output = self._get_lines(row_numbers)
 
-        hydrated_docs = [
+        return [
             Document(
                 doc_id=row[0],
                 link=row[1],
@@ -181,8 +189,6 @@ class RankerAdapter(abc.ABC):
             )
             for row_num, row in zip(row_numbers, documents_output)
         ]
-
-        return hydrated_docs
 
     @abc.abstractmethod
     def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict:
@@ -240,14 +246,14 @@ class BM25(RankerAdapter):
 RankersRegistry = RankingRegistry()
 
 
-def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
+def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None) -> BM25:
     if cfg is None:
         cfg = Config(load=True)
     ranker = BM25Ranking(cfg)
     return BM25(ranker, cfg=cfg, num_threads=num_threads)
 
 
-def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
+def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None) -> TFIDF:
     if cfg is None:
         cfg = Config(load=True)
     ranker = TFIDFRanking(cfg)

@@ -7,20 +7,23 @@ Use --workers to control parallelism (default: number of CPUs - 2).
 import argparse
 import multiprocessing as mp
 import os
-import numpy as np
+import sys
+import traceback
 from pathlib import Path
 import random
-import sys
+
+import numpy as np
 import tqdm
 
-from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
+from sea.ltr.candidates import iter_qids, load_qrels_map, load_queries_map
 from sea.ltr.features import FeatureExtractor
 from sea.utils.config_wrapper import Config
 
 # Worker-local state (initialized once per process)
 _retriever = None
 _fe = None
+_init_error = None
 
 
 def _init_worker():
@@ -28,26 +31,47 @@ def _init_worker():
 
     Uses num_threads=1 to avoid nested parallelism (processes already parallelize work).
     """
-    global _retriever, _fe
-    cfg = Config(load=True)
-    cfg.SEARCH.VERBOSE_OUTPUT = False
-    # Use single thread per worker to avoid oversubscription (N processes × M threads)
-    _retriever = BM25Retriever.from_config(cfg, num_threads=1)
-    _fe = FeatureExtractor.from_config(cfg)
+    global _retriever, _fe, _init_error
+    _init_error = None
+    try:
+        cfg = Config(load=True)
+        cfg.SEARCH.VERBOSE_OUTPUT = False
+        # Use single thread per worker to avoid oversubscription (N processes × M threads)
+        _retriever = BM25Retriever.from_config(cfg, num_threads=1)
+        _fe = FeatureExtractor.from_config(cfg)
+    except Exception as e:
+        _init_error = f"Worker init failed: {e}\n{traceback.format_exc()}"
+        _retriever = None
+        _fe = None
 
 
 def _process_query(args_tuple):
-    """Process a single query in a worker process."""
+    """Process a single query in a worker process.
+
+    Returns:
+        tuple: (features, labels) on success
+        dict: {"error": message} on error
+        None: on skip (no results, no positives, etc.)
+    """
     qid, query, positives_internal, candidate_topn, list_size, seed = args_tuple
 
-    id_results = _retriever.retrieve_ids(query, topn=candidate_topn)
-    if not id_results:
-        return None
+    # Check if worker initialization failed
+    if _init_error:
+        return {"error": _init_error}
+    if _retriever is None:
+        return {"error": "Retriever not initialized"}
 
-    return _sample_list_for_query(
-        qid, query, id_results, positives_internal,
-        _retriever, _fe, list_size, seed
-    )
+    try:
+        id_results = _retriever.retrieve_ids(query, topn=candidate_topn)
+        if not id_results:
+            return None
+
+        return _sample_list_for_query(
+            qid, query, id_results, positives_internal,
+            _retriever, _fe, list_size, seed
+        )
+    except Exception as e:
+        return {"error": f"Query {qid} failed: {e}\n{traceback.format_exc()}"}
 
 
 def _sample_list_for_query(
@@ -110,30 +134,55 @@ def _run_extraction(work_items, num_workers):
     all_features = []
     all_labels = []
     skipped = 0
+    errors = 0
+    first_error = None
+
+    def handle_result(result):
+        nonlocal skipped, errors, first_error
+        if result is None:
+            skipped += 1
+            return None
+        if isinstance(result, dict) and "error" in result:
+            errors += 1
+            if first_error is None:
+                first_error = result["error"]
+            return None
+        return result
 
     if num_workers == 1:
+        print("Initializing worker (single-process mode)...")
         _init_worker()
+        if _init_error:
+            print(f"ERROR: {_init_error}")
+            return [], [], 0
+        print("Worker initialized, starting feature extraction...")
+
         for item in tqdm.tqdm(work_items, desc="Extracting features"):
-            result = _process_query(item)
+            result = handle_result(_process_query(item))
             if result:
                 all_features.append(result[0])
                 all_labels.append(result[1])
-            else:
-                skipped += 1
     else:
-        # Use Pool.imap_unordered for efficient batched processing
-        # chunksize batches work items to reduce IPC overhead
-        mp_ctx = mp.get_context("spawn" if os.uname().sysname == "Darwin" else "forkserver")
-        chunksize = max(1, len(work_items) // (num_workers * 10))
+        mp_ctx = mp.get_context("spawn" if sys.platform == "darwin" else "forkserver")
+        # Use small chunksize for responsive progress updates (1 item per result)
+        chunksize = 1
+
+        print(f"Spawning {num_workers} worker processes (this may take a moment)...")
 
         with mp_ctx.Pool(processes=num_workers, initializer=_init_worker) as pool:
             results_iter = pool.imap_unordered(_process_query, work_items, chunksize=chunksize)
-            for result in tqdm.tqdm(results_iter, total=len(work_items), desc="Extracting features"):
+            pbar = tqdm.tqdm(results_iter, total=len(work_items), desc="Extracting features",
+                             smoothing=0, miniters=1)
+            for result in pbar:
+                result = handle_result(result)
                 if result:
                     all_features.append(result[0])
                     all_labels.append(result[1])
-                else:
-                    skipped += 1
+
+    if errors > 0:
+        print(f"\nWARNING: {errors} queries failed with errors.")
+        if first_error:
+            print(f"First error:\n{first_error}")
 
     return all_features, all_labels, skipped
 
@@ -167,18 +216,13 @@ def main():
     if not (args.queries and args.qrels and args.split_file):
         ap.error("Must provide --queries, --qrels, and --split-file (or define in base.yaml).")
 
-    # Check if output file already exists
     out_path = Path(args.out)
     if out_path.exists() and not args.force:
         print(f"Error: Output file already exists: {args.out}")
         print("\nUse --force to overwrite existing file.")
         sys.exit(1)
 
-    # Determine number of workers
-    if args.workers == 0:
-        num_workers = max(1, (os.cpu_count() or 4) - 2)
-    else:
-        num_workers = args.workers
+    num_workers = args.workers if args.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
 
     print("Loading queries and qrels...")
     queries = load_queries_map(args.queries)
@@ -202,10 +246,16 @@ def main():
     orig_to_int = {meta[0]: doc_id for doc_id, meta in doc_metadata.items()}
 
     qrels_internal = {}
+    unmapped_docs = 0
     for qid, orig_ids in qrels.items():
         internal_ids = {orig_to_int[oid] for oid in orig_ids if oid in orig_to_int}
+        unmapped_docs += len(orig_ids) - len(internal_ids)
         if internal_ids:
             qrels_internal[qid] = internal_ids
+
+    print(f"  Loaded {len(queries)} queries, {len(qrels)} qrels entries")
+    print(f"  Mapped {len(qrels_internal)} qrels to internal IDs ({unmapped_docs} docs not in index)")
+    print(f"  Document index has {len(orig_to_int)} documents")
 
     # Build work items
     work_items = [
@@ -213,6 +263,16 @@ def main():
         for qid in qids
         if qid in queries and qid in qrels_internal
     ]
+
+    # Diagnose why work items might be missing
+    if len(work_items) < len(qids):
+        missing_queries = sum(1 for qid in qids if qid not in queries)
+        missing_qrels = sum(1 for qid in qids if qid not in qrels_internal)
+        print(f"  Note: {len(qids)} qids requested, {len(work_items)} have both query text and qrels")
+        if missing_queries > 0:
+            print(f"    - {missing_queries} qids missing from queries file")
+        if missing_qrels > 0:
+            print(f"    - {missing_qrels} qids missing from qrels (or all their docs not in index)")
 
     print(f"Processing {len(work_items)} queries with {num_workers} workers...")
 
@@ -225,9 +285,7 @@ def main():
     print(f"Generated {len(all_features)} samples (skipped {skipped} queries)")
     print(f"Saving to {args.out}...")
 
-    out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-
     np.savez_compressed(
         args.out,
         features=np.array(all_features, dtype=np.float32),

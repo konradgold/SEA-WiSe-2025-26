@@ -83,11 +83,11 @@ LTR:
   QUERIES: "data/msmarco-doctrain-queries.tsv"
   QRELS: "data/msmarco-doctrain-qrels.tsv"
   SPLIT_DIR: "data/splits"
-  TRAIN_CACHE: "data/test_cache.npz"
-  VAL_CACHE: "data/test_cache.npz"
+  TRAIN_CACHE: "data/val_cache_final.npz"
+  VAL_CACHE: "data/val_cache_final.npz"
   CANDIDATE_TOPN: 200
   LIST_SIZE: 100
-  EPOCHS: 1
+  EPOCHS: 30
   BATCH_SIZE: 1024
   LEARNING_RATE: 0.001
   SCHEDULER:

@@ -25,49 +25,10 @@ from sentence_transformers import SentenceTransformer
 
 from sea.storage.embeddings import EmbeddingIO
 from sea.utils.config_wrapper import Config
+from sea.utils.device import detect_device
 
 
-# Truncate to ~512 tokens worth of text (avg 4 chars/token)
 MAX_CHARS = 2048
-
-
-def detect_device(requested: str) -> str:
-    """Auto-detect the best available device for PyTorch.
-
-    Args:
-        requested: Device from config ("auto", "cuda", "cuda:0", "mps", "cpu")
-
-    Returns:
-        Validated device string that is actually available.
-    """
-    if requested == "auto":
-        if torch.cuda.is_available():
-            return "cuda"
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            return "mps"
-        else:
-            return "cpu"
-
-    # Validate requested device is available
-    if requested.startswith("cuda"):
-        if not torch.cuda.is_available():
-            print(f"Warning: CUDA requested but not available. Falling back to CPU.")
-            return "cpu"
-        # Check specific device index if provided (e.g., "cuda:1")
-        if ":" in requested:
-            device_idx = int(requested.split(":")[1])
-            if device_idx >= torch.cuda.device_count():
-                print(f"Warning: {requested} not available (only {torch.cuda.device_count()} GPUs). Using cuda:0.")
-                return "cuda:0"
-        return requested
-
-    if requested == "mps":
-        if not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
-            print(f"Warning: MPS requested but not available. Falling back to CPU.")
-            return "cpu"
-        return requested
-
-    return requested  # cpu or unknown
 
 
 def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[int, str]]:
@@ -81,46 +42,12 @@ def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[in
                 break
             parts = line.strip().split("\t")
             if len(parts) >= 4:
-                title = parts[2] if len(parts) > 2 else ""
-                body = parts[3] if len(parts) > 3 else ""
-                # Prioritize title, then as much body as fits
-                text = title
+                title = parts[2]
+                body = parts[3]
                 remaining = MAX_CHARS - len(title) - 1
-                if remaining > 0 and body:
-                    text = f"{title} {body[:remaining]}"
+                text = f"{title} {body[:remaining]}" if remaining > 0 and body else title
                 docs.append((i, text.strip()))
     return docs
-
-
-def compute_embeddings_batch(
-    model: SentenceTransformer,
-    texts: list[str],
-    dim: int,
-    batch_size: int,
-) -> np.ndarray:
-    """Compute normalized Matryoshka embeddings."""
-    prefixed = ["search_document: " + t for t in texts]
-
-    all_embeddings = []
-    for i in range(0, len(prefixed), batch_size):
-        batch = prefixed[i : i + batch_size]
-        # Use model's native encoding with truncation
-        emb = model.encode(
-            batch,
-            batch_size=batch_size,
-            convert_to_tensor=True,
-            show_progress_bar=False,
-            normalize_embeddings=False,  # We normalize after Matryoshka truncation
-        )
-
-        # Matryoshka: layer_norm -> truncate -> L2 normalize
-        emb = F.layer_norm(emb, normalized_shape=(emb.shape[1],))
-        emb = emb[:, :dim]
-        emb = F.normalize(emb, p=2, dim=1)
-
-        all_embeddings.append(emb.cpu().numpy())
-
-    return np.vstack(all_embeddings).astype(np.float32)
 
 
 def compute_embeddings_batches(
@@ -129,7 +56,7 @@ def compute_embeddings_batches(
     dim: int,
     batch_size: int,
 ):
-    """Yield normalized Matryoshka embeddings in batches (for live progress + checkpointing)."""
+    """Yield normalized Matryoshka embeddings in batches."""
     prefixed = ["search_document: " + t for t in texts]
 
     for i in range(0, len(prefixed), batch_size):
