@@ -6,7 +6,8 @@ defaults:
 SEARCH:
   MAX_RESULTS: 10
   POSTINGS_CUT: 1000
-  EXPAND_QUERIES: true  # Enable/disable SPLADE query expansion
+  EXPAND_QUERIES: false  # Enable/disable SPLADE query expansion
+  TIME_MULTIPLIER: 100
   RANKING: "bm25"
   NUM_DOCS: 32000
   AVG_DOC_LEN: 100.0
@@ -24,5 +25,5 @@ SEARCH:
       url: 1.5
   RERANK:
     ACTIVE: true  # Enable/disable LTR reranking
-    MODEL_PATH: "artifacts/tfr_reranker"  # Path to trained LTR model
+    MODEL_PATH: "models/model.keras"  # Path to trained LTR model
     CANDIDATE_TOPN: 100  # Number of candidates to retrieve before reranking

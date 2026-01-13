@@ -61,7 +61,7 @@ class _LRUCache:
 class FeatureExtractor:
     cfg: DictConfig
     tokenizer: TokenizerAbstract
-    storage: StorageManager
+    storage_dict: dict[str, StorageManager]
     posting_cut: int
     features: FeatureSpec
     cache_max_docs: int = 10_000
@@ -78,14 +78,19 @@ class FeatureExtractor:
     def from_config(cls, cfg: Optional[DictConfig] = None, *, cache_max_docs: int = 10_000) -> "FeatureExtractor":
         cfg = cfg or Config(load=True)
         tokenizer = get_tokenizer(cfg)
-        storage = StorageManager(rewrite=False, cfg=cfg)
-        storage.init_all()
+        fields: list[str] = ["all"] if not cfg.SEARCH.FIELDED.ACTIVE else cfg.SEARCH.FIELDED.FIELDS
+        storage_dict: dict[str, StorageManager] = {}
+        for field in fields:
+            storage = StorageManager(rewrite=False, cfg=cfg,
+                                     field=field)
+            storage.init_all()
+            storage_dict[field] = storage
         posting_cut = int(cfg.SEARCH.POSTINGS_CUT) if cfg.SEARCH.POSTINGS_CUT is not None else 100
         features = get_default_features(cfg)
         return cls(
             cfg=cfg,
             tokenizer=tokenizer,
-            storage=storage,
+            storage_dict=storage_dict,
             posting_cut=posting_cut,
             features=features,
             cache_max_docs=cache_max_docs,
@@ -121,11 +126,18 @@ class FeatureExtractor:
         """
         BM25-style IDF using index df from the posting list.
         """
-        pl = self.storage.getPostingList(token)
-        if not pl or len(pl) < 1:
+        len_pl = 0
+        any_pl = False
+        for field, storage in self.storage_dict.items():
+            pl = storage.getPostingList(token)
+            if pl and len(pl) >= 1:
+                any_pl = True
+            else:
+                continue
+        
+            len_pl += int(pl[0])
+        if not any_pl:
             return 0.0
-
-        len_pl = int(pl[0])
         df = max(0, len_pl // 2)
         if df <= 0 or df > self.posting_cut:
             return 0.0

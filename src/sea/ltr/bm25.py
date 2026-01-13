@@ -22,9 +22,9 @@ class BM25Retriever:
 
     @classmethod
     def from_config(cls, cfg: DictConfig | None = None) -> "BM25Retriever":
-        cfg = cfg or Config(load=True)
+        cfg = Config(load=True) if cfg is None else cfg
         tokenizer = get_tokenizer(cfg)
-        ranker = build_bm25_ranker()
+        ranker = build_bm25_ranker(cfg)
         return cls(cfg=cfg, tokenizer=tokenizer, ranker=ranker)
 
     def retrieve(self, query: str, *, topn: int) -> list[Document]:
@@ -33,13 +33,12 @@ class BM25Retriever:
             return []
 
         # Override limit of top-n candidates since the other BM25 ranking truncates to `cfg.SEARCH.MAX_RESULTS`
-        inner_ranker = self.ranker.ranker
-        old_max = inner_ranker.max_results
-        inner_ranker.max_results = topn
+        old_max = self.ranker.max_results
+        self.ranker.max_results = topn
         try:
             docs: list[Document] = self.ranker(tokens)
         finally:
-            inner_ranker.max_results = old_max
+            self.ranker.max_results = old_max
 
         return docs[:topn] if topn > 0 else []
 

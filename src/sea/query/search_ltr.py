@@ -58,6 +58,8 @@ def search_documents(
 
 @hydra.main(config_name="search_ltr", version_base=None, config_path="../../../configs")
 def main(cfg):
+    print("Config:")
+    print(cfg)
     history = InMemoryHistory()
     session = PromptSession(history=history)
     
@@ -127,7 +129,7 @@ def main(cfg):
             final_topk=cfg.SEARCH.MAX_RESULTS
         )
         
-        elapsed = (time.perf_counter() - t0) * 1000
+        elapsed = (time.perf_counter() - t0) * cfg.SEARCH.TIME_MULTIPLIER
         history.append_string(query)
         chunker.set_query(final_query.split())
 

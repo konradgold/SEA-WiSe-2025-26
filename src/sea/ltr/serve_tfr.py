@@ -22,7 +22,7 @@ class TFRReranker:
 
     @classmethod
     def load(cls, *, model_path: str | Path, cfg: Optional[DictConfig] = None) -> "TFRReranker":
-        cfg = cfg or Config(load=True)
+        cfg = Config(load=True) if cfg is None else cfg
         retriever = BM25Retriever.from_config(cfg)
         fe = FeatureExtractor.from_config(cfg)
 
