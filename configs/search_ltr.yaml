@@ -6,7 +6,7 @@ defaults:
 SEARCH:
   MAX_RESULTS: 10
   POSTINGS_CUT: 1000
-  EXPAND_QUERIES: false  # Enable/disable SPLADE query expansion
+  EXPAND_QUERIES: true  # Enable/disable SPLADE query expansion
   TIME_MULTIPLIER: 100
   RANKING: "bm25"
   NUM_DOCS: 32000
