@@ -1,0 +1,14 @@
+defaults:
+  - base  # Inherits from base.yaml
+  - _self_
+
+
+queries: ???
+qrels: ???
+split_dir: ???
+model_path: ???
+candidate_topn: 200
+k: 10
+out: ""
+max_queries: 0  # 0 means no limit
+split: "val"  # options: "train", "val", "test"

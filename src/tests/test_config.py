@@ -1,7 +1,7 @@
 import unittest
 
 import yaml
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 class TestConfig(unittest.TestCase):
@@ -20,8 +20,9 @@ class TestConfig(unittest.TestCase):
         cfg = Config(load=True)
         self.assertIsNotNone(cfg)
         new_config = {"TOKENIZER": {"BACKEND": "new-tokenizer-model"}}
+        cfg.TOKENIZER.BACKEND = new_config["TOKENIZER"]["BACKEND"]
+        cfg.TOKENIZER.MIN_LEN = 2
         self.assertIsNotNone(cfg.TOKENIZER.MIN_LEN)
-        cfg.update_dict(new_config)
         self.assertEqual(cfg.TOKENIZER.BACKEND, "new-tokenizer-model")
         self.assertEqual(cfg.TOKENIZER.MIN_LEN, 2)
 

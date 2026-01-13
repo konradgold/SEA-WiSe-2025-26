@@ -2,7 +2,8 @@ from array import array
 from typing import Dict, Optional, Tuple
 
 from sea.storage.IO import DocDictonaryIO, TermDictionaryIO, PostingListIO
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 class StorageManager:
@@ -12,18 +13,19 @@ class StorageManager:
     def __init__(
         self,
         rewrite: bool = False,
-        cfg: Optional[Config] = None,
-        rewrite_doc_dict: bool = None,
+        cfg: Optional[DictConfig] = None,
+        rewrite_doc_dict: Optional[bool] = None,
+        field: Optional[str] = None
     ):
         self.rewrite = rewrite
         if cfg is None:
             cfg = Config(load=True)
-        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg)
-        self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg)
+        self.termDictionaryIO = TermDictionaryIO(rewrite=rewrite, cfg=cfg, field=field)
+        self.postingListIO = PostingListIO(rewrite=rewrite, cfg=cfg, field=field)
 
         # Only rewrite doc dict if explicitly requested or if rewrite is True and not explicitly disabled
         do_rewrite_doc = rewrite if rewrite_doc_dict is None else rewrite_doc_dict
-        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg)
+        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg, field=field)
 
         self.termDictionary: Dict[str, Tuple[int, int]] = {}
         self.docMetadata: Dict[int, Tuple[str, int]] = {}

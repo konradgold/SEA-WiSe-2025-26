@@ -10,6 +10,12 @@ TOKENIZER:
   STORE_POSITIONS: false
   STORE_TOKENS: false
 
+CHUNKER:
+  MAX_CHUNK_SIZE: 80
+  MIN_CHUNK_SIZE: 30
+  CHUNK_OVERLAP: 10
+  ENABLE: true
+
 DOCUMENTS: "data/msmarco-docs.tsv"
 DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
 INDEX_INTERVAL: 50
@@ -23,20 +29,32 @@ LOG_PATH: "data/log.txt"
 
 SEARCH:
   MAX_RESULTS: 10
-  POSTINGS_CUT: 100000 # limits number of postings read per term
-  EXPAND_QUERIES: false
+  POSTINGS_CUT: 1000 # limits number of postings read per term
+  EXPAND_QUERIES: true
   RANKING: "bm25" # options: "tfidf", "bm25", none
-  NUM_DOCS: 100000
+  NUM_DOCS: 32000
   AVG_DOC_LEN: 100.0
-  VERBOSE_OUTPUT: false
+  VERBOSE_OUTPUT: true
+  FIELDED:
+    ACTIVE: true
+    FIELDS: ["title", "body", "url"]
+    LENGTHS:
+      title: 20.0
+      body: 80.0
+      url: 10.0
+    WEIGHTS:
+      title: 2.0
+      body: 1.0
+      url: 1.5
+
 
 BM25:
   K1: 1.5
   B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 3200000
-  BATCH_SIZE: 10000
+  NUM_DOCUMENTS: 32000
+  BATCH_SIZE: 1000
 
 QUERY:
   MAX_PHRASE_LEN: 5
@@ -46,7 +64,7 @@ SPLADE:
   DEVICE: "cuda:0"  # options: "cpu", "cuda:0", etc.
   THRESHOLD: 0.01
   CACHE_DIR: "cache/splade"
-  CAP_EXPANSION: 10
+  CAP_EXPANSION: 2
 
 LTR:
   DATA_DIR: "data"

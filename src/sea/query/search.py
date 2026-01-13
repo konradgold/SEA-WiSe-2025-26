@@ -7,12 +7,13 @@ from prompt_toolkit.history import InMemoryHistory
 from sea.index.tokenization import get_tokenizer
 from sea.query.parser import QueryParser
 from sea.ranking import RankersRegistry
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
+from omegaconf import DictConfig
 
 
 def search_documents(
     *,
-    cfg: Config,
+    cfg: DictConfig,
     ranker,
     query: str,
     splade_encoder,
@@ -24,7 +25,6 @@ def search_documents(
     root_operator = query_parser.process_phrase2query(query, splade_encoder=splade_encoder)
     matches, final_query = root_operator.execute(ranker, tokenizer)
     return (sorted(matches)[:max_output_result], len(matches), final_query) if matches else (None, 0, final_query)
-
 
 def main():
     cfg = Config(load=True)

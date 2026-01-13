@@ -1,0 +1,10 @@
+defaults:
+  - base  # Inherits from base.yaml
+  - _self_
+
+limit: 0
+max_train_queries: 0
+max_val_queries: 2000
+out_dir: "artifacts/tfr_reranker"
+
+log_freq: 5

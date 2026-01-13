@@ -13,7 +13,7 @@ import tqdm
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
 from sea.ltr.features import FeatureExtractor
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 def sample_list_for_query(

@@ -4,7 +4,7 @@ from typing import Any, Optional
 import unicodedata
 from dataclasses import dataclass
 from .stopwords import get_default_stopwords
-from sea.utils.config import Config
+from sea.utils.config_wrapper import Config
 
 
 class TokenizerAbstract:
