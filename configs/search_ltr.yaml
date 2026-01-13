@@ -1,0 +1,28 @@
+defaults:
+  - base  # Inherits from base.yaml
+  - _self_
+
+# Search with LTR Reranking Configuration
+SEARCH:
+  MAX_RESULTS: 10
+  POSTINGS_CUT: 1000
+  EXPAND_QUERIES: true  # Enable/disable SPLADE query expansion
+  RANKING: "bm25"
+  NUM_DOCS: 32000
+  AVG_DOC_LEN: 100.0
+  VERBOSE_OUTPUT: true
+  FIELDED:
+    ACTIVE: true
+    FIELDS: ["title", "body", "url"]
+    LENGTHS:
+      title: 20.0
+      body: 80.0
+      url: 10.0
+    WEIGHTS:
+      title: 2.0
+      body: 1.0
+      url: 1.5
+  RERANK:
+    ACTIVE: true  # Enable/disable LTR reranking
+    MODEL_PATH: "artifacts/tfr_reranker"  # Path to trained LTR model
+    CANDIDATE_TOPN: 100  # Number of candidates to retrieve before reranking
