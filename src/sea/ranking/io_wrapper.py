@@ -70,6 +70,7 @@ class RankerAdapter(abc.ABC):
         all documents in the index (e.g., if NUM_DOCUMENTS changed).
         """
         needs_rebuild = False
+        required_rows = cfg.INGESTION.NUM_DOCUMENTS
 
         if os.path.exists(cfg.DOCUMENT_OFFSETS):
             with open(cfg.DOCUMENT_OFFSETS, 'rb') as f:
@@ -81,6 +82,7 @@ class RankerAdapter(abc.ABC):
             if max_doc_id > max_row_covered:
                 print(f"Offsets file stale (covers {max_row_covered} rows, need {max_doc_id}). Rebuilding...")
                 needs_rebuild = True
+                required_rows = max_doc_id + 1
         else:
             needs_rebuild = True
 
@@ -90,7 +92,7 @@ class RankerAdapter(abc.ABC):
                 tsv_path=cfg.DOCUMENTS,
                 interval=cfg.INDEX_INTERVAL,
                 index_path=cfg.DOCUMENT_OFFSETS,
-                limit=cfg.INGESTION.NUM_DOCUMENTS
+                limit=required_rows
             )
 
     def __call__(self, tokens: list) -> list[Document]:
