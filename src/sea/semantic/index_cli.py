@@ -38,19 +38,23 @@ def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[in
     and embedding indices. Missing fields are treated as empty strings.
     """
     docs = []
+    end = start + count
     with open(tsv_path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f):
             if i < start:
                 continue
-            if i >= start + count:
+            if i >= end:
                 break
             parts = line.strip().split("\t")
             # Use empty strings for missing fields to maintain row alignment
             title = parts[2] if len(parts) > 2 else ""
             body = parts[3] if len(parts) > 3 else ""
             remaining = MAX_CHARS - len(title) - 1
-            text = f"{title} {body[:remaining]}" if remaining > 0 and body else title
-            docs.append((i, text.strip() if text.strip() else "empty"))
+            if remaining > 0 and body:
+                text = f"{title} {body[:remaining]}"
+            else:
+                text = title
+            docs.append((i, text.strip() or "empty"))
     return docs
 
 

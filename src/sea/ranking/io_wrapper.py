@@ -249,14 +249,24 @@ class BM25(RankerAdapter):
 RankersRegistry = RankingRegistry()
 
 
-def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False) -> BM25:
+def bm25(
+    cfg: Optional[DictConfig] = None,
+    num_threads: Optional[int] = None,
+    verbose: bool = False
+) -> BM25:
+    """Create a BM25 ranker adapter."""
     if cfg is None:
         cfg = Config(load=True)
     ranker = BM25Ranking(cfg)
     return BM25(ranker, cfg=cfg, num_threads=num_threads, verbose=verbose)
 
 
-def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False) -> TFIDF:
+def tfidf(
+    cfg: Optional[DictConfig] = None,
+    num_threads: Optional[int] = None,
+    verbose: bool = False
+) -> TFIDF:
+    """Create a TF-IDF ranker adapter."""
     if cfg is None:
         cfg = Config(load=True)
     ranker = TFIDFRanking(cfg)

@@ -1,6 +1,7 @@
 import sys
 import time
 
+import numpy as np
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
@@ -19,7 +20,7 @@ SEARCH_MODES = [
 ]
 
 
-def print_header():
+def print_header() -> None:
     """Display the application header."""
     console.print()
     console.print("╔══════════════════════════════════════╗", style="bold")
@@ -53,7 +54,7 @@ def select_mode() -> tuple[str, bool]:
             sys.exit(0)
 
 
-def print_status(message: str, success: bool = True):
+def print_status(message: str, success: bool = True) -> None:
     """Print a status line with colored indicator."""
     indicator = "✓" if success else "✗"
     color = "green" if success else "red"
@@ -61,7 +62,7 @@ def print_status(message: str, success: bool = True):
     console.print(f" {message}")
 
 
-def build_search_components(cfg, retrieval: str, use_reranker: bool):
+def build_search_components(cfg, retrieval: str, use_reranker: bool) -> dict:
     """Build search components based on selected mode.
 
     Returns a dict with the initialized components and strategy string.
@@ -133,13 +134,42 @@ def build_search_components(cfg, retrieval: str, use_reranker: bool):
     return components
 
 
-def execute_search(query, components, tokenizer, cfg):
+def apply_ltr_reranking(query: str, docs: list, reranker, max_results: int) -> list:
+    """Apply LTR model to rerank documents.
+
+    Extracts features from documents, pads to model's expected list size,
+    and returns documents sorted by predicted relevance scores.
+    """
+    if not docs:
+        return []
+
+    features = reranker.fe.extract_many(query, docs)
+    list_size = reranker.model.input_shape[1]
+    num_features = reranker.model.input_shape[2]
+    num_docs = features.shape[0]
+
+    # Pad features to expected list size
+    padded = np.zeros((1, list_size, num_features), dtype=np.float32)
+    use_count = min(num_docs, list_size)
+    padded[0, :use_count, :] = features[:use_count, :]
+
+    # Get scores and sort
+    scores = reranker.model.predict(padded, verbose=0)[0][:num_docs]
+    ranked_indices = np.argsort(-scores)
+
+    reranked = []
+    for idx in ranked_indices[:max_results]:
+        if idx < len(docs):
+            docs[idx].score = float(scores[idx])
+            reranked.append(docs[idx])
+    return reranked
+
+
+def execute_search(query: str, components: dict, tokenizer, cfg) -> tuple[list, str]:
     """Execute search using the configured components.
 
-    Returns list of Document results.
+    Returns tuple of (document results, final query used).
     """
-    import numpy as np
-
     final_query = query
 
     if components["splade_encoder"] is not None:
@@ -149,47 +179,24 @@ def execute_search(query, components, tokenizer, cfg):
     if components["semantic_searcher"] is not None and components["reranker"] is not None:
         results = components["semantic_searcher"].search(query, topn=components["candidate_topn"])
         docs = components["bm25_retriever"].hydrate_docs(results)
-        if not docs:
-            return [], final_query
-
-        # Extract features and apply LTR model
-        reranker = components["reranker"]
-        X = reranker.fe.extract_many(query, docs)
-        expected_list_size = reranker.model.input_shape[1]
-        num_features = reranker.model.input_shape[2]
-        num_docs = X.shape[0]
-
-        X_padded = np.zeros((1, expected_list_size, num_features), dtype=np.float32)
-        use_count = min(num_docs, expected_list_size)
-        X_padded[0, :use_count, :] = X[:use_count, :]
-
-        scores = reranker.model.predict(X_padded, verbose=0)[0]
-        actual_scores = scores[:num_docs]
-        order = np.argsort(-actual_scores)
-
-        reranked = []
-        for i in order[:cfg.SEARCH.MAX_RESULTS]:
-            if i >= len(docs):
-                continue
-            d = docs[int(i)]
-            d.score = float(actual_scores[int(i)])
-            reranked.append(d)
+        reranked = apply_ltr_reranking(query, docs, components["reranker"], cfg.SEARCH.MAX_RESULTS)
         return reranked, final_query
 
     # BM25 + LTR: use BM25 for candidates, then rerank with LTR
     if components["reranker"] is not None:
-        return components["reranker"].rerank(
+        results = components["reranker"].rerank(
             final_query,
             candidate_topn=components["candidate_topn"],
             topk=cfg.SEARCH.MAX_RESULTS
-        ), final_query
+        )
+        return results, final_query
 
     # BM25 only
     tokens = tokenizer.tokenize(final_query)
     return components["retriever"](tokens), final_query
 
 
-def print_search_header(mode: str):
+def print_search_header(mode: str) -> None:
     """Print the search prompt header."""
     console.print()
     console.print("━" * 40, style="dim")
@@ -197,7 +204,7 @@ def print_search_header(mode: str):
     console.print("━" * 40, style="dim")
 
 
-def print_results(documents, elapsed_ms: float, chunker, verbose: bool):
+def print_results(documents: list, elapsed_ms: float, chunker, verbose: bool) -> None:
     """Print search results with rank numbers and separators."""
     if not documents:
         console.print("\nNo matches found.", style="yellow")
@@ -213,7 +220,7 @@ def print_results(documents, elapsed_ms: float, chunker, verbose: bool):
     console.print(f"\nFound {len(documents)} results in {elapsed_ms:.1f}ms", style="bold")
 
 
-def main():
+def main() -> None:
     cfg = Config(load=True)
 
     # Show header and mode selection
