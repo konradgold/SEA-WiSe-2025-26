@@ -12,14 +12,14 @@ class EmbeddingClient:
         self.timeout = timeout
 
     def _embed(self, texts: list[str], text_type: Literal["query", "document"]) -> np.ndarray:
-        with httpx.Client(timeout=self.timeout) as client:
-            response = client.post(
+        with httpx.Client(timeout=self.timeout) as http_client:
+            response = http_client.post(
                 f"{self.base_url}/embed",
                 json={"texts": texts, "type": text_type},
             )
             response.raise_for_status()
-            data = response.json()
-            return np.array(data["embeddings"], dtype=np.float32)
+            response_data = response.json()
+            return np.array(response_data["embeddings"], dtype=np.float32)
 
     def embed_query(self, text: str) -> np.ndarray:
         """Embed a single query. Returns shape (dim,)."""

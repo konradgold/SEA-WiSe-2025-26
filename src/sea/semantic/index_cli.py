@@ -16,54 +16,68 @@ from sea.utils.config_wrapper import Config
 from sea.utils.device import detect_device
 
 
-MAX_CHARS = 2048
+MAX_TEXT_LENGTH = 2048
 
 
-def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[int, str]]:
-    docs = []
-    end = start + count
-    with open(tsv_path, "r", encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            if i < start:
+def read_documents_batch(tsv_path: str, start_row: int, row_count: int) -> list[tuple[int, str]]:
+    """Read batch of docs from TSV with title and body
+    Text is truncated to MAX_TEXT_LENGTH chars
+    """
+    documents = []
+    end_row = start_row + row_count
+
+    with open(tsv_path, "r", encoding="utf-8") as tsv_file:
+        for row_index, line in enumerate(tsv_file):
+            if row_index < start_row:
                 continue
-            if i >= end:
+            if row_index >= end_row:
                 break
-            parts = line.strip().split("\t")
-            title = parts[2] if len(parts) > 2 else ""
-            body = parts[3] if len(parts) > 3 else ""
-            remaining = MAX_CHARS - len(title) - 1
-            if remaining > 0 and body:
-                text = f"{title} {body[:remaining]}"
+
+            columns = line.strip().split("\t")
+            title = columns[2] if len(columns) > 2 else ""
+            body = columns[3] if len(columns) > 3 else ""
+
+            # Combine title + body
+            remaining_chars = MAX_TEXT_LENGTH - len(title) - 1  # -1 for space
+            if remaining_chars > 0 and body:
+                combined_text = f"{title} {body[:remaining_chars]}"
             else:
-                text = title
-            docs.append((i, text.strip() or "empty"))
-    return docs
+                combined_text = title
+
+            # Use placeholder for blank docs
+            documents.append((row_index, combined_text.strip() or "empty"))
+
+    return documents
 
 
 def compute_embeddings_batches(
     model: SentenceTransformer,
     texts: list[str],
-    dim: int,
+    embedding_dimension: int,
     batch_size: int,
 ):
-    """Yield normalized Matryoshka embeddings in batches."""
-    prefixed = ["search_document: " + t for t in texts]
+    """Yield normalized Matryoshka embeddings in batches, same normalization pipeline as the embedding:
+    layer norm -> truncate -> L2 normalize.
+    """
+    # Add document prefix required by model
+    prefixed_texts = ["search_document: " + text for text in texts]
 
-    for i in range(0, len(prefixed), batch_size):
-        batch = prefixed[i : i + batch_size]
-        emb = model.encode(
-            batch,
+    for batch_start in range(0, len(prefixed_texts), batch_size):
+        batch_texts = prefixed_texts[batch_start : batch_start + batch_size]
+        raw_embeddings = model.encode(
+            batch_texts,
             batch_size=batch_size,
             convert_to_tensor=True,
             show_progress_bar=False,
             normalize_embeddings=False,
         )
 
-        emb = F.layer_norm(emb, normalized_shape=(emb.shape[1],))
-        emb = emb[:, :dim]
-        emb = F.normalize(emb, p=2, dim=1)
+        # Matryoshka reduction 
+        normalized = F.layer_norm(raw_embeddings, normalized_shape=(raw_embeddings.shape[1],))
+        truncated = normalized[:, :embedding_dimension]
+        unit_vectors = F.normalize(truncated, p=2, dim=1)
 
-        yield emb.cpu().numpy().astype(np.float32)
+        yield unit_vectors.cpu().numpy().astype(np.float32)
 
 
 def get_checkpoint_path(data_path: str) -> Path:
@@ -93,113 +107,113 @@ def main():
     parser.add_argument("--force", action="store_true", help="Overwrite existing embeddings file")
     args = parser.parse_args()
 
-    cfg = Config(load=True)
+    config = Config(load=True)
 
     # Check for existing embeddings file
     if not args.resume:
-        embeddings_path = os.path.join(cfg.DATA_PATH, "embeddings.bin")
+        embeddings_path = os.path.join(config.DATA_PATH, "embeddings.bin")
         if os.path.exists(embeddings_path) and not args.force:
             print(f"Error: Embeddings file already exists: {embeddings_path}")
             print("\nUse --force to overwrite existing file, or --resume to continue from checkpoint.")
             sys.exit(1)
-    model_id = cfg.SEMANTIC.MODEL_ID
-    requested_device = cfg.SEMANTIC.DEVICE
+
+    model_id = config.SEMANTIC.MODEL_ID
+    requested_device = config.SEMANTIC.DEVICE
     device = detect_device(requested_device)
-    dim = cfg.SEMANTIC.DIM
-    batch_size = args.batch_size or cfg.SEMANTIC.BATCH_SIZE
-    docs_path = cfg.DOCUMENTS
-    data_path = cfg.DATA_PATH
+    embedding_dimension = config.SEMANTIC.DIM
+    batch_size = args.batch_size or config.SEMANTIC.BATCH_SIZE
+    documents_path = config.DOCUMENTS
+    data_directory = config.DATA_PATH
 
     # Check for checkpoint
-    checkpoint = load_checkpoint(data_path) if args.resume else {"completed_docs": 0, "partial_path": None}
-    start_doc = checkpoint["completed_docs"]
+    checkpoint = load_checkpoint(data_directory) if args.resume else {"completed_docs": 0, "partial_path": None}
+    start_document_index = checkpoint["completed_docs"]
 
-    if start_doc > 0:
-        print(f"Resuming from document {start_doc:,}")
+    if start_document_index > 0:
+        print(f"Resuming from document {start_document_index:,}")
 
     print(f"Loading model {model_id} on {device}...")
     model = SentenceTransformer(model_id, trust_remote_code=True, device=device)
 
-    # Process in chunks with checkpointing
-    chunk_size = args.checkpoint_every
+    # Process in chunks with checkpointing for large datasets
+    documents_per_checkpoint = args.checkpoint_every
     all_embeddings = []
 
     # Load existing partial embeddings if resuming
-    partial_path = checkpoint.get("partial_path")
-    if partial_path and os.path.exists(partial_path):
-        print(f"Loading partial embeddings from {partial_path}...")
-        all_embeddings.append(np.load(partial_path))
+    partial_embeddings_path = checkpoint.get("partial_path")
+    if partial_embeddings_path and os.path.exists(partial_embeddings_path):
+        print(f"Loading partial embeddings from {partial_embeddings_path}...")
+        all_embeddings.append(np.load(partial_embeddings_path))
 
-    # Count total docs if needed
-    total_docs = args.num_docs
-    if total_docs < 0:
+    # Count total docs if not specified
+    total_documents = args.num_docs
+    if total_documents < 0:
         print("Counting documents in corpus...")
-        with open(docs_path, "r", encoding="utf-8") as f:
-            total_docs = sum(1 for _ in f)
-        print(f"Found {total_docs:,} documents")
+        with open(documents_path, "r", encoding="utf-8") as file:
+            total_documents = sum(1 for _ in file)
+        print(f"Found {total_documents:,} documents")
 
-    pbar = tqdm.tqdm(total=total_docs, initial=start_doc, desc="Embedding docs")
+    progress_bar = tqdm.tqdm(total=total_documents, initial=start_document_index, desc="Embedding docs")
 
-    t0 = perf_counter()
-    current_doc = start_doc
-    next_checkpoint = ((current_doc // chunk_size) + 1) * chunk_size
+    start_time = perf_counter()
+    current_document_index = start_document_index
+    next_checkpoint_at = ((current_document_index // documents_per_checkpoint) + 1) * documents_per_checkpoint
 
-    while current_doc < total_docs:
-        # Read chunk
-        chunk_count = min(chunk_size, total_docs - current_doc)
-        docs = read_documents_batch(docs_path, current_doc, chunk_count)
+    while current_document_index < total_documents:
+        # Read chunk of documents
+        documents_to_read = min(documents_per_checkpoint, total_documents - current_document_index)
+        documents = read_documents_batch(documents_path, current_document_index, documents_to_read)
 
-        if not docs:
+        if not documents:
             break
 
-        texts = [text for _, text in docs]
+        document_texts = [text for _, text in documents]
 
-        # Embed in smaller batches so tqdm and checkpointing advance continuously.
-        for emb_batch in compute_embeddings_batches(model, texts, dim, batch_size):
-            all_embeddings.append(emb_batch)
-            current_doc += emb_batch.shape[0]
-            pbar.update(emb_batch.shape[0])
+        # Embed in smaller batches so progress bar advances smoothly
+        for embedding_batch in compute_embeddings_batches(model, document_texts, embedding_dimension, batch_size):
+            all_embeddings.append(embedding_batch)
+            current_document_index += embedding_batch.shape[0]
+            progress_bar.update(embedding_batch.shape[0])
 
             # Save checkpoint when crossing scheduled boundaries
-            if current_doc < total_docs and current_doc >= next_checkpoint:
-                partial = np.vstack(all_embeddings)
-                partial_path = os.path.join(data_path, "embeddings_partial.npy")
-                np.save(partial_path, partial)
-                save_checkpoint(data_path, current_doc, partial_path)
-                elapsed = perf_counter() - t0
-                docs_per_sec = current_doc / elapsed if elapsed > 0 else 0.0
-                remaining = (
-                    (total_docs - current_doc) / docs_per_sec
-                    if docs_per_sec > 0
+            if current_document_index < total_documents and current_document_index >= next_checkpoint_at:
+                partial_embeddings = np.vstack(all_embeddings)
+                partial_embeddings_path = os.path.join(data_directory, "embeddings_partial.npy")
+                np.save(partial_embeddings_path, partial_embeddings)
+                save_checkpoint(data_directory, current_document_index, partial_embeddings_path)
+
+                elapsed_seconds = perf_counter() - start_time
+                documents_per_second = current_document_index / elapsed_seconds if elapsed_seconds > 0 else 0.0
+                remaining_seconds = (
+                    (total_documents - current_document_index) / documents_per_second
+                    if documents_per_second > 0
                     else float("inf")
                 )
-                print(
-                    f"\nCheckpoint at {current_doc:,} docs. ETA: {remaining/60:.1f} min"
-                )
-                next_checkpoint += chunk_size
+                print(f"\nCheckpoint at {current_document_index:,} docs. ETA: {remaining_seconds/60:.1f} min")
+                next_checkpoint_at += documents_per_checkpoint
 
-    pbar.close()
+    progress_bar.close()
 
     # Combine and save final embeddings
     final_embeddings = np.vstack(all_embeddings)
     print(f"\nFinal shape: {final_embeddings.shape}")
 
     # Write to binary format
-    embedding_io = EmbeddingIO(cfg)
+    embedding_io = EmbeddingIO(config)
     embedding_io.write(final_embeddings, force=args.force or args.resume)
 
-    # Clean up checkpoint
-    checkpoint_path = get_checkpoint_path(data_path)
-    if checkpoint_path.exists():
-        checkpoint_path.unlink()
-    partial_path = os.path.join(data_path, "embeddings_partial.npy")
-    if os.path.exists(partial_path):
-        os.remove(partial_path)
+    # Clean up checkpoint files
+    checkpoint_file_path = get_checkpoint_path(data_directory)
+    if checkpoint_file_path.exists():
+        checkpoint_file_path.unlink()
+    partial_embeddings_path = os.path.join(data_directory, "embeddings_partial.npy")
+    if os.path.exists(partial_embeddings_path):
+        os.remove(partial_embeddings_path)
 
-    elapsed = perf_counter() - t0
-    mb = final_embeddings.nbytes / (1024 * 1024)
-    print(f"Done! {final_embeddings.shape[0]:,} docs, {dim} dims, {mb:.1f} MB")
-    print(f"Time: {elapsed/60:.1f} min ({final_embeddings.shape[0]/elapsed:.1f} docs/sec)")
+    total_time_seconds = perf_counter() - start_time
+    size_megabytes = final_embeddings.nbytes / (1024 * 1024)
+    print(f"Done! {final_embeddings.shape[0]:,} docs, {embedding_dimension} dims, {size_megabytes:.1f} MB")
+    print(f"Time: {total_time_seconds/60:.1f} min ({final_embeddings.shape[0]/total_time_seconds:.1f} docs/sec)")
 
 
 if __name__ == "__main__":

@@ -22,7 +22,7 @@ from sea.utils.config_wrapper import Config
 
 # Worker-local state (initialized once per process)
 _retriever = None
-_fe = None
+_feature_extractor = None
 _init_error = None
 
 
@@ -31,18 +31,18 @@ def _init_worker():
 
     Uses num_threads=1 to avoid nested parallelism (processes already parallelize work).
     """
-    global _retriever, _fe, _init_error
+    global _retriever, _feature_extractor, _init_error
     _init_error = None
     try:
-        cfg = Config(load=True)
-        cfg.SEARCH.VERBOSE_OUTPUT = False
+        config = Config(load=True)
+        config.SEARCH.VERBOSE_OUTPUT = False
         # Use single thread per worker to avoid oversubscription (N processes × M threads)
-        _retriever = BM25Retriever.from_config(cfg, num_threads=1)
-        _fe = FeatureExtractor.from_config(cfg)
+        _retriever = BM25Retriever.from_config(config, num_threads=1)
+        _feature_extractor = FeatureExtractor.from_config(config)
     except Exception as e:
         _init_error = f"Worker init failed: {e}\n{traceback.format_exc()}"
         _retriever = None
-        _fe = None
+        _feature_extractor = None
 
 
 def _process_query(args_tuple):
@@ -53,7 +53,7 @@ def _process_query(args_tuple):
         dict: {"error": message} on error
         None: on skip (no results, no positives, etc.)
     """
-    qid, query, positives_internal, candidate_topn, list_size, seed = args_tuple
+    query_id, query_text, positives_internal, candidate_top_n, list_size, seed = args_tuple
 
     # Check if worker initialization failed
     if _init_error:
@@ -62,16 +62,16 @@ def _process_query(args_tuple):
         return {"error": "Retriever not initialized"}
 
     try:
-        id_results = _retriever.retrieve_ids(query, topn=candidate_topn)
-        if not id_results:
+        id_score_results = _retriever.retrieve_ids(query_text, topn=candidate_top_n)
+        if not id_score_results:
             return None
 
         return _sample_list_for_query(
-            qid, query, id_results, positives_internal,
-            _retriever, _fe, list_size, seed
+            query_id, query_text, id_score_results, positives_internal,
+            _retriever, _feature_extractor, list_size, seed
         )
     except Exception as e:
-        return {"error": f"Query {qid} failed: {e}\n{traceback.format_exc()}"}
+        return {"error": f"Query {query_id} failed: {e}\n{traceback.format_exc()}"}
 
 
 def _sample_list_for_query(
@@ -84,41 +84,51 @@ def _sample_list_for_query(
     list_size: int,
     seed: int,
 ):
-    """Sample one positive and (list_size-1) negatives, extract features."""
+    """Sample one positive and (list_size-1) hard negatives, then extract features.
+
+    Hard negative sampling: pick negatives from the top-50 BM25 results that are
+    irrelevant
+    """
     if list_size < 2:
         return None
 
-    pos_int_ids = [int_id for int_id, _ in id_results if int_id in positives_internal]
-    if not pos_int_ids:
+    # Separate retrieved docs into positives and negatives
+    positive_ids_in_results = [internal_id for internal_id, _ in id_results if internal_id in positives_internal]
+    if not positive_ids_in_results:
         return None
 
-    neg_int_ids = [int_id for int_id, _ in id_results if int_id not in positives_internal]
-    if not neg_int_ids:
+    negative_ids_in_results = [internal_id for internal_id, _ in id_results if internal_id not in positives_internal]
+    if not negative_ids_in_results:
         return None
 
-    rng = random.Random((seed * 1_000_003) ^ qid)
-    pos_id = rng.choice(pos_int_ids)
+    # reproducable seed based on qid
+    random_generator = random.Random((seed * 1_000_003) ^ qid)
+    selected_positive_id = random_generator.choice(positive_ids_in_results)
 
-    hard_pool_topk = 50
-    pool = neg_int_ids[:hard_pool_topk]
-    num_neg = list_size - 1
+    # Hard negative pool: top-50 non-relevant docs (highest BM25 scores among negatives)
+    hard_negative_pool_size = 50
+    hard_negative_pool = negative_ids_in_results[:hard_negative_pool_size]
+    num_negatives_needed = list_size - 1
 
-    if len(pool) >= num_neg:
-        negs = rng.sample(pool, num_neg)
+    if len(hard_negative_pool) >= num_negatives_needed:
+        selected_negative_ids = random_generator.sample(hard_negative_pool, num_negatives_needed)
     else:
-        negs = [rng.choice(pool) for _ in range(num_neg)]
+        # If pool is smaller than needed sample with replacement
+        selected_negative_ids = [random_generator.choice(hard_negative_pool) for _ in range(num_negatives_needed)]
 
-    score_map = dict(id_results)
-    chosen_pairs = [(pos_id, score_map[pos_id])] + [(nid, score_map[nid]) for nid in negs]
-    rng.shuffle(chosen_pairs)
+    id_to_score = dict(id_results)
+    selected_id_score_pairs = [(selected_positive_id, id_to_score[selected_positive_id])]
+    selected_id_score_pairs += [(negative_id, id_to_score[negative_id]) for negative_id in selected_negative_ids]
+    random_generator.shuffle(selected_id_score_pairs)
 
     # Hydrate documents from disk
-    docs = retriever.hydrate_docs(chosen_pairs)
-    if len(docs) != list_size:
+    documents = retriever.hydrate_docs(selected_id_score_pairs)
+    if len(documents) != list_size:
         return None
 
-    labels = np.array([1.0 if p[0] == pos_id else 0.0 for p in chosen_pairs], dtype=np.float32)
-    features = fe.extract_many(query, docs).astype(np.float32, copy=False)
+    # 1.0 for the positive document, 0.0 for negatives
+    labels = np.array([1.0 if pair[0] == selected_positive_id else 0.0 for pair in selected_id_score_pairs], dtype=np.float32)
+    features = fe.extract_many(query, documents).astype(np.float32, copy=False)
 
     return features, labels
 
@@ -178,36 +188,36 @@ def _run_extraction(work_items, num_workers):
 
 
 def main():
-    cfg = Config(load=True)
-    cfg.SEARCH.VERBOSE_OUTPUT = False
+    config = Config(load=True)
+    config.SEARCH.VERBOSE_OUTPUT = False
 
-    ap = argparse.ArgumentParser(description="Pre-compute LTR features and save to .npz.")
-    ap.add_argument(
-        "--queries", type=str, default=cfg.LTR.QUERIES if hasattr(cfg, "LTR") else None, help="Path to queries TSV."
+    parser = argparse.ArgumentParser(description="Pre-compute LTR features and save to .npz.")
+    parser.add_argument(
+        "--queries", type=str, default=config.LTR.QUERIES if hasattr(config, "LTR") else None, help="Path to queries TSV."
     )
-    ap.add_argument(
-        "--qrels", type=str, default=cfg.LTR.QRELS if hasattr(cfg, "LTR") else None, help="Path to qrels file."
+    parser.add_argument(
+        "--qrels", type=str, default=config.LTR.QRELS if hasattr(config, "LTR") else None, help="Path to qrels file."
     )
-    ap.add_argument(
+    parser.add_argument(
         "--split-file",
         type=str,
         default=None,
         help="Path to file with one qid per line (e.g., train_qids.txt).",
     )
-    ap.add_argument("--out", type=str, required=True)
-    ap.add_argument("--limit", type=int, default=0)
-    ap.add_argument("--list-size", type=int, default=cfg.LTR.LIST_SIZE if hasattr(cfg, "LTR") else 100)
-    ap.add_argument("--candidate-topn", type=int, default=cfg.LTR.CANDIDATE_TOPN if hasattr(cfg, "LTR") else 200)
-    ap.add_argument("--seed", type=int, default=cfg.LTR.SEED if hasattr(cfg, "LTR") else 42)
-    ap.add_argument("--force", action="store_true", help="Overwrite existing output file")
-    ap.add_argument("--workers", type=int, default=0, help="Number of worker processes (0 = auto, 1 = single-process)")
-    args = ap.parse_args()
+    parser.add_argument("--out", type=str, required=True)
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--list-size", type=int, default=config.LTR.LIST_SIZE if hasattr(config, "LTR") else 100)
+    parser.add_argument("--candidate-topn", type=int, default=config.LTR.CANDIDATE_TOPN if hasattr(config, "LTR") else 200)
+    parser.add_argument("--seed", type=int, default=config.LTR.SEED if hasattr(config, "LTR") else 42)
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
+    parser.add_argument("--workers", type=int, default=0, help="Number of worker processes (0 = auto, 1 = single-process)")
+    args = parser.parse_args()
 
     if not (args.queries and args.qrels and args.split_file):
-        ap.error("Must provide --queries, --qrels, and --split-file (or define in base.yaml).")
+        parser.error("Must provide --queries, --qrels, and --split-file (or define in base.yaml).")
 
-    out_path = Path(args.out)
-    if out_path.exists() and not args.force:
+    output_path = Path(args.out)
+    if output_path.exists() and not args.force:
         print(f"Error: Output file already exists: {args.out}")
         print("\nUse --force to overwrite existing file.")
         sys.exit(1)
@@ -215,67 +225,67 @@ def main():
     num_workers = args.workers if args.workers > 0 else max(1, (os.cpu_count() or 4) - 2)
 
     print("Loading queries and qrels...")
-    queries = load_queries_map(args.queries)
-    qrels = load_qrels_map(args.qrels)
-    qids = list(iter_qids(args.split_file))
+    query_id_to_text = load_queries_map(args.queries)
+    query_id_to_relevant_docs = load_qrels_map(args.qrels)
+    query_ids = list(iter_qids(args.split_file))
 
     if args.limit > 0:
-        qids = qids[:args.limit]
+        query_ids = query_ids[:args.limit]
 
     # Load retriever in main process to get doc metadata mapping
     print("Initializing retriever for qrels mapping...")
-    retriever = BM25Retriever.from_config(cfg)
+    retriever = BM25Retriever.from_config(config)
 
-    # Convert qrels to internal IDs once (avoids repeated lookups)
+    # Convert qrels to internal IDs once
     print("Mapping qrels to internal IDs...")
-    storage_mgr = next(iter(retriever.ranker.storage_managers.values()))
-    doc_metadata = storage_mgr.getDocMetadata()
-    if not doc_metadata:
+    storage_manager = next(iter(retriever.ranker.storage_managers.values()))
+    document_metadata = storage_manager.getDocMetadata()
+    if not document_metadata:
         print("Error: Document metadata is empty. Please re-run ingestion.")
         return
-    orig_to_int = {meta[0]: doc_id for doc_id, meta in doc_metadata.items()}
+    original_id_to_internal_id = {meta[0]: doc_id for doc_id, meta in document_metadata.items()}
 
-    qrels_internal = {}
-    unmapped_docs = 0
-    for qid, orig_ids in qrels.items():
-        internal_ids = {orig_to_int[oid] for oid in orig_ids if oid in orig_to_int}
-        unmapped_docs += len(orig_ids) - len(internal_ids)
+    qrels_with_internal_ids = {}
+    unmapped_document_count = 0
+    for query_id, original_doc_ids in query_id_to_relevant_docs.items():
+        internal_ids = {original_id_to_internal_id[orig_id] for orig_id in original_doc_ids if orig_id in original_id_to_internal_id}
+        unmapped_document_count += len(original_doc_ids) - len(internal_ids)
         if internal_ids:
-            qrels_internal[qid] = internal_ids
+            qrels_with_internal_ids[query_id] = internal_ids
 
-    print(f"  Loaded {len(queries)} queries, {len(qrels)} qrels entries")
-    print(f"  Mapped {len(qrels_internal)} qrels to internal IDs ({unmapped_docs} docs not in index)")
-    print(f"  Document index has {len(orig_to_int)} documents")
+    print(f"  Loaded {len(query_id_to_text)} queries, {len(query_id_to_relevant_docs)} qrels entries")
+    print(f"  Mapped {len(qrels_with_internal_ids)} qrels to internal IDs ({unmapped_document_count} docs not in index)")
+    print(f"  Document index has {len(original_id_to_internal_id)} documents")
 
-    # Build work items
+    # Build work items (query_id, query_text, positive_ids, candidate_topn, list_size, seed)
     work_items = [
-        (qid, queries[qid], qrels_internal[qid], args.candidate_topn, args.list_size, args.seed)
-        for qid in qids
-        if qid in queries and qid in qrels_internal
+        (query_id, query_id_to_text[query_id], qrels_with_internal_ids[query_id], args.candidate_topn, args.list_size, args.seed)
+        for query_id in query_ids
+        if query_id in query_id_to_text and query_id in qrels_with_internal_ids
     ]
 
     # Diagnose why work items might be missing
-    if len(work_items) < len(qids):
-        missing_queries = sum(1 for qid in qids if qid not in queries)
-        missing_qrels = sum(1 for qid in qids if qid not in qrels_internal)
-        print(f"  Note: {len(qids)} qids requested, {len(work_items)} have both query text and qrels")
-        if missing_queries > 0:
-            print(f"    - {missing_queries} qids missing from queries file")
-        if missing_qrels > 0:
-            print(f"    - {missing_qrels} qids missing from qrels (or all their docs not in index)")
+    if len(work_items) < len(query_ids):
+        missing_query_text = sum(1 for query_id in query_ids if query_id not in query_id_to_text)
+        missing_relevance_labels = sum(1 for query_id in query_ids if query_id not in qrels_with_internal_ids)
+        print(f"  Note: {len(query_ids)} qids requested, {len(work_items)} have both query text and qrels")
+        if missing_query_text > 0:
+            print(f"    - {missing_query_text} qids missing from queries file")
+        if missing_relevance_labels > 0:
+            print(f"    - {missing_relevance_labels} qids missing from qrels (or all their docs not in index)")
 
     print(f"Processing {len(work_items)} queries with {num_workers} workers...")
 
-    all_features, all_labels, skipped = _run_extraction(work_items, num_workers)
+    all_features, all_labels, skipped_count = _run_extraction(work_items, num_workers)
 
     if not all_features:
-        print(f"Error: No samples generated from {len(work_items)} queries (skipped {skipped}).")
+        print(f"Error: No samples generated from {len(work_items)} queries (skipped {skipped_count}).")
         return
 
-    print(f"Generated {len(all_features)} samples (skipped {skipped} queries)")
+    print(f"Generated {len(all_features)} samples (skipped {skipped_count} queries)")
     print(f"Saving to {args.out}...")
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         args.out,
         features=np.array(all_features, dtype=np.float32),
