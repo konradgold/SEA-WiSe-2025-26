@@ -16,13 +16,14 @@ class Document:
         self.content = content
         self.score = score
 
-    def pprint(self, verbose: bool = False, loud: bool = False, chunker: Optional[Chunker]=None) -> str:
+    def pprint(self, verbose: bool = False, loud: bool = False, chunker: Optional[Chunker]=None, rank: Optional[int] = None) -> str:
+        rank_prefix = f"#{rank}  " if rank is not None else ""
         if verbose:
             if chunker is not None and self.content is not None:
                 self.content = chunker.chunk_text(self.content)
-            t = f"## Document ID: {self.doc_id}\n\n**Title**: [{self.title}]({self.link})\n\n**Content**: {self.content}\n\n**Scoring**: _{self.score:.2f}_"
+            t = f"{rank_prefix}**{self.title}**\n\n{self.link}\n\n{self.content}\n\nScore: {self.score:.2f}"
         else:
-            t = f"Document ID: {self.doc_id}\nTitle: {self.title}\nScore: {self.score}"
+            t = f"{rank_prefix}{self.title}\n{self.link}\nScore: {self.score:.2f}"
         if loud:
             console.print(Markdown(t))
         return t
