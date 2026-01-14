@@ -32,7 +32,11 @@ MAX_CHARS = 2048
 
 
 def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[int, str]]:
-    """Read a batch of documents starting at row `start`."""
+    """Read a batch of documents starting at row `start`.
+
+    Always includes every row to maintain alignment between TSV row numbers
+    and embedding indices. Missing fields are treated as empty strings.
+    """
     docs = []
     with open(tsv_path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f):
@@ -41,12 +45,12 @@ def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[in
             if i >= start + count:
                 break
             parts = line.strip().split("\t")
-            if len(parts) >= 4:
-                title = parts[2]
-                body = parts[3]
-                remaining = MAX_CHARS - len(title) - 1
-                text = f"{title} {body[:remaining]}" if remaining > 0 and body else title
-                docs.append((i, text.strip()))
+            # Use empty strings for missing fields to maintain row alignment
+            title = parts[2] if len(parts) > 2 else ""
+            body = parts[3] if len(parts) > 3 else ""
+            remaining = MAX_CHARS - len(title) - 1
+            text = f"{title} {body[:remaining]}" if remaining > 0 and body else title
+            docs.append((i, text.strip() if text.strip() else "empty"))
     return docs
 
 
