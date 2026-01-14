@@ -37,11 +37,12 @@ def get_default_thread_count() -> int:
 
 class RankerAdapter(abc.ABC):
 
-    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False):
         if cfg is None:
             cfg = Config(load=True)
         self.ranker = ranker
         self.cfg = cfg
+        self.verbose = verbose
         self.max_results = cfg.SEARCH.MAX_RESULTS or 10
         self.cut = cfg.SEARCH.POSTINGS_CUT or 100
         self.fields = cfg.SEARCH.FIELDED.FIELDS if cfg.SEARCH.FIELDED.ACTIVE else ["all"]
@@ -51,7 +52,7 @@ class RankerAdapter(abc.ABC):
         self._init_offsets(cfg)
 
         self.num_threads = num_threads if num_threads is not None else get_default_thread_count()
-        if self.num_threads > 1 and cfg.SEARCH.VERBOSE_OUTPUT:
+        if self.num_threads > 1 and self.verbose:
             print(f"Using {self.num_threads} threads for document reading.")
 
     def _init_storage_managers(self, cfg: DictConfig) -> None:
@@ -144,7 +145,7 @@ class RankerAdapter(abc.ABC):
 
         documents_output = [all_results[row] for row in row_numbers]
 
-        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+        if self.verbose:
             elapsed = (perf_counter() - t0) * 1000
             print(f"Reading {len(row_numbers)} lines took {elapsed:.2f} ms ({elapsed/len(row_numbers):.2f} ms/line)")
 
@@ -174,7 +175,7 @@ class RankerAdapter(abc.ABC):
         return results
 
     def _read_documents(self, ranked_results: list[tuple[int, float]]) -> list[Document]:
-        if self.cfg.SEARCH.VERBOSE_OUTPUT:
+        if self.verbose:
             print(f"Reading {len(ranked_results)} documents from disk...")
 
         id_to_score = dict(ranked_results)
@@ -199,8 +200,8 @@ class RankerAdapter(abc.ABC):
 
 class TFIDF(RankerAdapter):
 
-    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
-        super().__init__(ranker, cfg, num_threads)
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False):
+        super().__init__(ranker, cfg, num_threads, verbose)
 
     def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, list[int]]:
         pos_list = pl.tolist()
@@ -217,8 +218,8 @@ class TFIDF(RankerAdapter):
 
 class BM25(RankerAdapter):
 
-    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None):
-        super().__init__(ranker, cfg, num_threads)
+    def __init__(self, ranker: Ranking, cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False):
+        super().__init__(ranker, cfg, num_threads, verbose)
 
     def process_posting_list(self, pl: array, field: Optional[str] = None) -> dict[int, tuple[int, int]]:
         pos_list = pl.tolist()
@@ -235,7 +236,7 @@ class BM25(RankerAdapter):
             tfs.append(pos_list[i+1])
             i += 2 # Assuming that positions are not stored
         if len(doc_ids) > self.cut:
-            if self.cfg.SEARCH.VERBOSE_OUTPUT:
+            if self.verbose:
                 print(
                     f"Skipping token with {len(doc_ids)} postings exceeding cut of {self.cut}."
                 )
@@ -248,18 +249,18 @@ class BM25(RankerAdapter):
 RankersRegistry = RankingRegistry()
 
 
-def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None) -> BM25:
+def bm25(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False) -> BM25:
     if cfg is None:
         cfg = Config(load=True)
     ranker = BM25Ranking(cfg)
-    return BM25(ranker, cfg=cfg, num_threads=num_threads)
+    return BM25(ranker, cfg=cfg, num_threads=num_threads, verbose=verbose)
 
 
-def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None) -> TFIDF:
+def tfidf(cfg: Optional[DictConfig] = None, num_threads: Optional[int] = None, verbose: bool = False) -> TFIDF:
     if cfg is None:
         cfg = Config(load=True)
     ranker = TFIDFRanking(cfg)
-    return TFIDF(ranker, cfg=cfg, num_threads=num_threads)
+    return TFIDF(ranker, cfg=cfg, num_threads=num_threads, verbose=verbose)
 
 
 RankersRegistry.register("bm25", bm25)
