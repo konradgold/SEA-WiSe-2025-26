@@ -65,27 +65,19 @@ class RankerAdapter(abc.ABC):
             self.storage_managers[field] = storage_manager
 
     def _init_offsets(self, cfg: DictConfig) -> None:
-        """Load or build document offsets index.
-
-        Automatically rebuilds if the existing offsets file doesn't cover
-        all documents in the index (e.g., if NUM_DOCUMENTS changed).
-        """
-        needs_rebuild = False
+        needs_rebuild = not os.path.exists(cfg.DOCUMENT_OFFSETS)
         required_rows = cfg.INGESTION.NUM_DOCUMENTS
 
-        if os.path.exists(cfg.DOCUMENT_OFFSETS):
+        if not needs_rebuild:
             with open(cfg.DOCUMENT_OFFSETS, 'rb') as f:
                 self.offsets = pickle.load(f)
 
-            # Check if offsets cover all docs in the index
             max_doc_id = max(self.storage_managers[self.fields[0]].getDocMetadata().keys())
             max_row_covered = (len(self.offsets) - 1) * cfg.INDEX_INTERVAL + cfg.INDEX_INTERVAL - 1
             if max_doc_id > max_row_covered:
                 print(f"Offsets file stale (covers {max_row_covered} rows, need {max_doc_id}). Rebuilding...")
                 needs_rebuild = True
                 required_rows = max_doc_id + 1
-        else:
-            needs_rebuild = True
 
         if needs_rebuild:
             print("Building document offsets index...")
@@ -126,16 +118,11 @@ class RankerAdapter(abc.ABC):
         return token_list
 
     def _get_lines(self, row_numbers: list[int]) -> List[List[str]]:
-        """Read document lines using parallel threads."""
         t0 = perf_counter()
         sorted_rows = sorted(row_numbers)
 
-        # Divide rows among threads
         batch_size = max(1, len(sorted_rows) // self.num_threads)
-        batches = [
-            sorted_rows[i:i + batch_size]
-            for i in range(0, len(sorted_rows), batch_size)
-        ]
+        batches = [sorted_rows[i:i + batch_size] for i in range(0, len(sorted_rows), batch_size)]
 
         all_results = {}
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:

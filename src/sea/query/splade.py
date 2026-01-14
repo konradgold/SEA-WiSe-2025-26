@@ -42,25 +42,16 @@ class SpladeEncoder:
         sparse_dict_tokens = {
             self.idx2token[idx]: round(weight, 2) for idx, weight in zip(cols, weights)
         }
-        # sort so we can see most relevant tokens first
-        sparse_dict_tokens=  [
-            (k, v) for k, v in sorted(
-                sparse_dict_tokens.items(),
-                key=lambda item: item[1],
-                reverse=True
-            )
-            if v >= self.threshold
-        ][:take_top]
+        sorted_tokens = sorted(sparse_dict_tokens.items(), key=lambda item: item[1], reverse=True)
+        sparse_dict_tokens = [(k, v) for k, v in sorted_tokens if v >= self.threshold][:take_top]
         return sparse_dict, sparse_dict_tokens
     
     def expand(self, text: str) -> list[str]:
         _, sparse_dict_tokens = self._encode(text)
-        tokens = set(k for k, v in sparse_dict_tokens)
+        expansion_tokens = {k for k, v in sparse_dict_tokens}
         input_tokens = set(self.tokenizer.tokenize(text))
-        tokens -= input_tokens
-        tokens = list(tokens)[:self.cutoff]
-        out = tokens + text.split()
-        return out
+        new_tokens = list(expansion_tokens - input_tokens)[:self.cutoff]
+        return new_tokens + text.split()
     
     def tokenize(self, text):
         return list(self.tokenizer.tokenize(text))

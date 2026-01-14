@@ -21,7 +21,6 @@ SEARCH_MODES = [
 
 
 def print_header() -> None:
-    """Display the application header."""
     console.print()
     console.print("╔══════════════════════════════════════╗", style="bold")
     console.print("║         SEA Search Engine            ║", style="bold")
@@ -30,23 +29,20 @@ def print_header() -> None:
 
 
 def select_mode() -> tuple[str, bool]:
-    """Display mode selection menu and return (retrieval_type, use_reranker)."""
     console.print("Select search mode:\n", style="bold")
 
-    num_modes = len(SEARCH_MODES)
     for i, (name, desc, _, _) in enumerate(SEARCH_MODES, 1):
         console.print(f"  [{i}] {name}", style="bold white", end="")
         console.print(f"  ({desc})", style="dim")
 
     console.print()
 
-    valid_choices = [str(i) for i in range(1, num_modes + 1)]
+    num_modes = len(SEARCH_MODES)
     while True:
         try:
             choice = input(f"Enter choice (1-{num_modes}): ").strip()
-            if choice in valid_choices:
-                idx = int(choice) - 1
-                _, _, retrieval, use_reranker = SEARCH_MODES[idx]
+            if choice.isdigit() and 1 <= int(choice) <= num_modes:
+                _, _, retrieval, use_reranker = SEARCH_MODES[int(choice) - 1]
                 return retrieval, use_reranker
             console.print(f"Please enter a number between 1 and {num_modes}.", style="yellow")
         except (EOFError, KeyboardInterrupt):
@@ -55,18 +51,12 @@ def select_mode() -> tuple[str, bool]:
 
 
 def print_status(message: str, success: bool = True) -> None:
-    """Print a status line with colored indicator."""
-    indicator = "✓" if success else "✗"
-    color = "green" if success else "red"
+    indicator, color = ("✓", "green") if success else ("✗", "red")
     console.print(f"  [{indicator}]", style=f"bold {color}", end="")
     console.print(f" {message}")
 
 
 def build_search_components(cfg, retrieval: str, use_reranker: bool) -> dict:
-    """Build search components based on selected mode.
-
-    Returns a dict with the initialized components and strategy string.
-    """
     components = {
         "retriever": None,
         "semantic_searcher": None,
@@ -135,11 +125,6 @@ def build_search_components(cfg, retrieval: str, use_reranker: bool) -> dict:
 
 
 def apply_ltr_reranking(query: str, docs: list, reranker, max_results: int) -> list:
-    """Apply LTR model to rerank documents.
-
-    Extracts features from documents, pads to model's expected list size,
-    and returns documents sorted by predicted relevance scores.
-    """
     if not docs:
         return []
 
@@ -148,12 +133,10 @@ def apply_ltr_reranking(query: str, docs: list, reranker, max_results: int) -> l
     num_features = reranker.model.input_shape[2]
     num_docs = features.shape[0]
 
-    # Pad features to expected list size
     padded = np.zeros((1, list_size, num_features), dtype=np.float32)
     use_count = min(num_docs, list_size)
     padded[0, :use_count, :] = features[:use_count, :]
 
-    # Get scores and sort
     scores = reranker.model.predict(padded, verbose=0)[0][:num_docs]
     ranked_indices = np.argsort(-scores)
 
@@ -166,23 +149,17 @@ def apply_ltr_reranking(query: str, docs: list, reranker, max_results: int) -> l
 
 
 def execute_search(query: str, components: dict, tokenizer, cfg) -> tuple[list, str]:
-    """Execute search using the configured components.
-
-    Returns tuple of (document results, final query used).
-    """
     final_query = query
 
     if components["splade_encoder"] is not None:
         final_query = " ".join(components["splade_encoder"].expand(query))
 
-    # Semantic + LTR: use semantic search for candidates, then rerank with LTR
     if components["semantic_searcher"] is not None and components["reranker"] is not None:
         results = components["semantic_searcher"].search(query, topn=components["candidate_topn"])
         docs = components["bm25_retriever"].hydrate_docs(results)
         reranked = apply_ltr_reranking(query, docs, components["reranker"], cfg.SEARCH.MAX_RESULTS)
         return reranked, final_query
 
-    # BM25 + LTR: use BM25 for candidates, then rerank with LTR
     if components["reranker"] is not None:
         results = components["reranker"].rerank(
             final_query,
@@ -191,13 +168,11 @@ def execute_search(query: str, components: dict, tokenizer, cfg) -> tuple[list, 
         )
         return results, final_query
 
-    # BM25 only
     tokens = tokenizer.tokenize(final_query)
     return components["retriever"](tokens), final_query
 
 
 def print_search_header(mode: str) -> None:
-    """Print the search prompt header."""
     console.print()
     console.print("━" * 40, style="dim")
     console.print(f"Mode: {mode}", style="bold")
@@ -205,7 +180,6 @@ def print_search_header(mode: str) -> None:
 
 
 def print_results(documents: list, elapsed_ms: float, chunker, verbose: bool) -> None:
-    """Print search results with rank numbers and separators."""
     if not documents:
         console.print("\nNo matches found.", style="yellow")
         return

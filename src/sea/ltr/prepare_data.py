@@ -88,21 +88,19 @@ def _sample_list_for_query(
     if list_size < 2:
         return None
 
-    # Find positives in the retrieved set
     pos_int_ids = [int_id for int_id, _ in id_results if int_id in positives_internal]
     if not pos_int_ids:
         return None
-
-    rng = random.Random((seed * 1_000_003) ^ qid)
-    pos_id = rng.choice(pos_int_ids)
 
     neg_int_ids = [int_id for int_id, _ in id_results if int_id not in positives_internal]
     if not neg_int_ids:
         return None
 
-    # Sample from hard negatives (top of the ranking)
+    rng = random.Random((seed * 1_000_003) ^ qid)
+    pos_id = rng.choice(pos_int_ids)
+
     hard_pool_topk = 50
-    pool = neg_int_ids[:min(hard_pool_topk, len(neg_int_ids))]
+    pool = neg_int_ids[:hard_pool_topk]
     num_neg = list_size - 1
 
     if len(pool) >= num_neg:
@@ -126,11 +124,6 @@ def _sample_list_for_query(
 
 
 def _run_extraction(work_items, num_workers):
-    """Run feature extraction with single or multiple workers.
-
-    Uses Pool.imap_unordered with chunking for efficient batched processing
-    and smooth progress bar updates.
-    """
     all_features = []
     all_labels = []
     skipped = 0
@@ -164,13 +157,10 @@ def _run_extraction(work_items, num_workers):
                 all_labels.append(result[1])
     else:
         mp_ctx = mp.get_context("spawn" if sys.platform == "darwin" else "forkserver")
-        # Use small chunksize for responsive progress updates (1 item per result)
-        chunksize = 1
-
         print(f"Spawning {num_workers} worker processes (this may take a moment)...")
 
         with mp_ctx.Pool(processes=num_workers, initializer=_init_worker) as pool:
-            results_iter = pool.imap_unordered(_process_query, work_items, chunksize=chunksize)
+            results_iter = pool.imap_unordered(_process_query, work_items, chunksize=1)
             pbar = tqdm.tqdm(results_iter, total=len(work_items), desc="Extracting features",
                              smoothing=0, miniters=1)
             for result in pbar:

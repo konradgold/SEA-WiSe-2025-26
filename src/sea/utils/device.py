@@ -1,17 +1,7 @@
-"""Device auto-detection for PyTorch."""
-
 import torch
 
 
 def detect_device(requested: str) -> str:
-    """Auto-detect the best available device for PyTorch.
-
-    Args:
-        requested: Device from config ("auto", "cuda", "cuda:0", "mps", "cpu")
-
-    Returns:
-        Validated device string that is actually available.
-    """
     if requested == "auto":
         if torch.cuda.is_available():
             return "cuda"

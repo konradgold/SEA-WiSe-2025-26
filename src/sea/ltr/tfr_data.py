@@ -61,7 +61,7 @@ def _sample_list_for_query(
     if not neg_int_ids:
         return None
 
-    pool = neg_int_ids[: max(1, min(hard_pool_topk, len(neg_int_ids)))]
+    pool = neg_int_ids[:hard_pool_topk] if neg_int_ids else []
     num_neg = list_size - 1
 
     if len(pool) >= num_neg:

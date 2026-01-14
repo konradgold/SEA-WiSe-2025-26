@@ -1,15 +1,3 @@
-"""CLI for computing and storing document embeddings.
-
-For large corpora (3.3M docs), key optimizations:
-- GPU with large batches
-- Checkpointing to resume on crash
-- Progress saved periodically
-
-Usage:
-    uv run python -m sea.semantic.index_cli --num_docs 3300000
-    uv run python -m sea.semantic.index_cli --resume  # continue from checkpoint
-"""
-
 import argparse
 import json
 import os
@@ -32,11 +20,6 @@ MAX_CHARS = 2048
 
 
 def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[int, str]]:
-    """Read a batch of documents starting at row `start`.
-
-    Always includes every row to maintain alignment between TSV row numbers
-    and embedding indices. Missing fields are treated as empty strings.
-    """
     docs = []
     end = start + count
     with open(tsv_path, "r", encoding="utf-8") as f:
@@ -46,7 +29,6 @@ def read_documents_batch(tsv_path: str, start: int, count: int) -> list[tuple[in
             if i >= end:
                 break
             parts = line.strip().split("\t")
-            # Use empty strings for missing fields to maintain row alignment
             title = parts[2] if len(parts) > 2 else ""
             body = parts[3] if len(parts) > 3 else ""
             remaining = MAX_CHARS - len(title) - 1
