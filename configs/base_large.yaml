@@ -17,18 +17,18 @@ CHUNKER:
   ENABLE: true
 
 DOCUMENTS: "data/msmarco-docs.tsv"
-DOCUMENT_OFFSETS: "data_small/msmarco-offsets.pkl"
+DOCUMENT_OFFSETS: "data/msmarco-offsets.pkl"
 INDEX_INTERVAL: 50
-DATA_PATH: "data_small/"
-BLOCK_PATH: "data_small/blocks/"
+DATA_PATH: "data/"
+BLOCK_PATH: "data/blocks/"
 HEADER_BLOCK_FILE: "SEAB\x01"
 HEADER_INDEX_FILE: "SEAI\x01"
 HEADER_POSTING_FILE: "SEAP\x01"
 HEADER_DOC_DICT_FILE: "SEAD\x01"
-LOG_PATH: "data_small/log.txt"
+LOG_PATH: "data/log.txt"
 
 SEARCH:
-  RETRIEVAL: "semantic"  # "bm25" or "semantic"
+  RETRIEVAL: "bm25"  # "bm25" or "semantic"
   MAX_RESULTS: 10
   POSTINGS_CUT: 1000
   EXPAND_QUERIES: false  # SPLADE query expansion (only for bm25)
@@ -37,7 +37,7 @@ SEARCH:
   VERBOSE_OUTPUT: true
   RERANKER:
     ENABLED: true  # LTR reranker on top of retrieval
-    MODEL_PATH: "artifacts/tfr_reranker_FINAL/model.keras"
+    MODEL_PATH: "artifacts/tfr_reranker/model.keras"
     CANDIDATE_TOPN: 200
   FIELDED:
     ACTIVE: true
@@ -65,7 +65,7 @@ BM25:
   B: 0.75
 
 INGESTION:
-  NUM_DOCUMENTS: 32000  # -1 = all documents, or specify a limit
+  NUM_DOCUMENTS: -1  # -1 = all documents, or specify a limit
   BATCH_SIZE: 10000
 
 QUERY:
@@ -79,10 +79,10 @@ SPLADE:
   CAP_EXPANSION: 2
 
 LTR:
-  DATA_DIR: "data_small"
+  DATA_DIR: "data"
   QUERIES: "data/msmarco-doctrain-queries.tsv"
   QRELS: "data/msmarco-doctrain-qrels.tsv"
-  SPLIT_DIR: "data_small/splits"
+  SPLIT_DIR: "data/splits"
   TRAIN_CACHE: "data/val_cache_final.npz"
   VAL_CACHE: "data/val_cache_final.npz"
   CANDIDATE_TOPN: 200
