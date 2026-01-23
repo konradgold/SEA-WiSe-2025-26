@@ -266,10 +266,10 @@ class TestStorageIO(unittest.TestCase, TestSetupMixin):
 
     def test_doc_dictionary_io(self):
         """Test document dictionary write and read."""
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
 
         # Write
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         metadata = {
             0: ("D001", 15),
             1: ("D002", 20),
@@ -279,7 +279,7 @@ class TestStorageIO(unittest.TestCase, TestSetupMixin):
         doc_io.close()
 
         # Read
-        doc_io = DocDictonaryIO(rewrite=False, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=False, cfg=self.cfg, field="body")
         result = doc_io.read()
         doc_io.close()
 
@@ -302,9 +302,9 @@ class TestStorageIO(unittest.TestCase, TestSetupMixin):
         sm_write.close()
 
         # Write doc metadata separately
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
 
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         doc_io.write_metadata({0: ("D001", 10), 1: ("D002", 15), 2: ("D003", 20)})
         doc_io.close()
 
@@ -441,7 +441,7 @@ class TestIngestionPipeline(unittest.TestCase, TestSetupMixin):
         """Test k-way merging of block files."""
         from sea.ingest.worker import Worker
         from sea.ingest.kmerger import KMerger
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
 
         # First create blocks
         lines = [(i, line + "\n") for i, line in enumerate(SAMPLE_DOCS_TSV.strip().split("\n"))]
@@ -457,7 +457,7 @@ class TestIngestionPipeline(unittest.TestCase, TestSetupMixin):
 
         # Write document metadata
         combined_metadata = {**result1.metadata["body"], **result2.metadata["body"]}
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         doc_io.write_metadata(combined_metadata)
         doc_io.close()
 
@@ -503,7 +503,7 @@ class TestBM25Ranking(unittest.TestCase, TestSetupMixin):
         """Build a minimal index for testing."""
         from sea.ingest.worker import Worker
         from sea.ingest.kmerger import KMerger
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
 
         # Use single field for simpler testing (use "body" since "all" has enum bug)
         # FIELDED.ACTIVE must be True so RankerAdapter uses FIELDED.FIELDS
@@ -518,7 +518,7 @@ class TestBM25Ranking(unittest.TestCase, TestSetupMixin):
         result = worker.process_batch("0", lines)
 
         # Write doc metadata
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         doc_io.write_metadata(result.metadata["body"])
         doc_io.close()
 
@@ -664,7 +664,7 @@ class TestLTRDataPreparation(unittest.TestCase, TestSetupMixin):
         """Build minimal index for LTR testing."""
         from sea.ingest.worker import Worker
         from sea.ingest.kmerger import KMerger
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
 
         # Use "body" field since "all" has enum bug
         # FIELDED.ACTIVE must be True so RankerAdapter uses FIELDED.FIELDS
@@ -677,7 +677,7 @@ class TestLTRDataPreparation(unittest.TestCase, TestSetupMixin):
         worker = Worker(store_positions=False, cfg=self.cfg, fields=["body"])
         result = worker.process_batch("0", lines)
 
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         doc_io.write_metadata(result.metadata["body"])
         doc_io.close()
 
@@ -895,7 +895,7 @@ class TestFullPipeline(unittest.TestCase, TestSetupMixin):
         """Test complete pipeline: ingest -> index -> search."""
         from sea.ingest.worker import Worker
         from sea.ingest.kmerger import KMerger
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
         from sea.ltr.bm25 import BM25Retriever
 
         # Configure for single field (use "body" since "all" has enum bug)
@@ -911,7 +911,7 @@ class TestFullPipeline(unittest.TestCase, TestSetupMixin):
         result = worker.process_batch("0", lines)
 
         # Step 2: Write metadata
-        doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field="body")
+        doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field="body")
         doc_io.write_metadata(result.metadata["body"])
         doc_io.close()
 
@@ -948,7 +948,7 @@ class TestFullPipeline(unittest.TestCase, TestSetupMixin):
         """Test fielded search with multiple fields."""
         from sea.ingest.worker import Worker
         from sea.ingest.kmerger import KMerger
-        from sea.storage.IO import DocDictonaryIO
+        from sea.storage.IO import DocDictionaryIO
         from sea.ltr.bm25 import BM25Retriever
 
         # Configure for multiple fields
@@ -965,7 +965,7 @@ class TestFullPipeline(unittest.TestCase, TestSetupMixin):
 
         # Write metadata for each field
         for field in ["title", "body"]:
-            doc_io = DocDictonaryIO(rewrite=True, cfg=self.cfg, field=field)
+            doc_io = DocDictionaryIO(rewrite=True, cfg=self.cfg, field=field)
             doc_io.write_metadata(result.metadata[field])
             doc_io.close()
 

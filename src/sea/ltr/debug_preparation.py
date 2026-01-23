@@ -8,7 +8,7 @@ sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from sea.ltr.candidates import load_qrels_map, load_queries_map, iter_qids
 from sea.ltr.bm25 import BM25Retriever
-from sea.storage.IO import DocDictonaryIO
+from sea.storage.IO import DocDictionaryIO
 
 
 @hydra.main(config_path="../../../configs", config_name="debug_preparation", version_base=None)
@@ -33,7 +33,7 @@ def main(cfg):
     print(f"Analyzing {len(qids)} QIDs from split file...\n")
 
     print("Mapping qrels to internal IDs...")
-    doc_io = DocDictonaryIO(rewrite=False, cfg=cfg)
+    doc_io = DocDictionaryIO(rewrite=False, cfg=cfg)
     doc_metadata = doc_io.read()
     orig_to_int = {meta[0]: doc_id for doc_id, meta in doc_metadata.items()}
     doc_io.close()
