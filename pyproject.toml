@@ -1,8 +1,10 @@
 [project]
 name = "sea-wise-2025-26"
 version = "0.1.0"
-description = "Add your description here"
+description = "A search engine with BM25, semantic retrieval, and Learning-to-Rank reranking for MS MARCO documents"
 readme = "README.md"
+license = { text = "MIT" }
+keywords = ["search-engine", "information-retrieval", "bm25", "learning-to-rank", "semantic-search"]
 requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.3.3",
