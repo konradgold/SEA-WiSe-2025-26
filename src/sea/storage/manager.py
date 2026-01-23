@@ -1,15 +1,26 @@
 from array import array
 from typing import Dict, Optional, Tuple
 
-from sea.storage.IO import DocDictonaryIO, TermDictionaryIO, PostingListIO
+from sea.storage.IO import DocDictionaryIO, TermDictionaryIO, PostingListIO
 from sea.utils.config_wrapper import Config
 from omegaconf import DictConfig
 
 
 class StorageManager:
+    """I/O manager for the search engine's disk-based index.
 
-    # if rewrite is True, files are opened in write mode (existing files will be overwritten)
-    # if rewrite is False, files are opened in read mode
+    Coordinates access to three key data structures:
+    - Term Dictionary: Maps terms to posting list locations on disk
+    - Posting Lists: Contains document IDs and term frequencies
+    - Document Dictionary: Maps internal IDs to original IDs and metadata
+
+    Args:
+        rewrite: If True, opens files in write mode (overwrites existing).
+        cfg: OmegaConf configuration object.
+        rewrite_doc_dict: Override for doc dictionary rewrite behavior.
+        field: Optional field name for fielded search indexes.
+    """
+
     def __init__(
         self,
         rewrite: bool = False,
@@ -25,7 +36,7 @@ class StorageManager:
 
         # Only rewrite doc dict if explicitly requested or if rewrite is True and not explicitly disabled
         do_rewrite_doc = rewrite if rewrite_doc_dict is None else rewrite_doc_dict
-        self.DocDictionaryIO = DocDictonaryIO(rewrite=do_rewrite_doc, cfg=cfg, field=field)
+        self.DocDictionaryIO = DocDictionaryIO(rewrite=do_rewrite_doc, cfg=cfg, field=field)
 
         self.termDictionary: Dict[str, Tuple[int, int]] = {}
         self.docMetadata: Dict[int, Tuple[str, int]] = {}

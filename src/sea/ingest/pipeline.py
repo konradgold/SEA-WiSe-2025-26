@@ -10,7 +10,7 @@ from typing import Dict, Iterator, List, Optional, Tuple
 from sea.ingest.kmerger import KMerger
 from sea.ingest.worker import  BatchTimings, init_worker, process_batch
 import logging
-from sea.storage.IO import DocDictonaryIO
+from sea.storage.IO import DocDictionaryIO
 from sea.utils.config_wrapper import Config
 from sea.utils.logger import dir_size, write_message_to_log_file
 from omegaconf import DictConfig
@@ -125,7 +125,7 @@ class Ingestion:
     def _write_metadata_to_disk(self, metadata: Dict[str, Dict[int, list[str|int]]]):
         for field, meta in metadata.items():
             print(f"Writing metadata for field '{field}' with {len(meta):,} documents...")
-            doc_dict_io = DocDictonaryIO(rewrite=True, field=field)
+            doc_dict_io = DocDictionaryIO(rewrite=True, field=field)
             doc_dict_io.write_metadata(meta)
             doc_dict_io.close()
 
