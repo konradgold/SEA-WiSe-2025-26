@@ -1,7 +1,7 @@
 
 from abc import abstractmethod
 import json
-from typing import List, Optional, Tuple, final
+from typing import List, Optional, Tuple
 from sea.index.tokenization import TokenizerAbstract, get_tokenizer
 import logging
 
