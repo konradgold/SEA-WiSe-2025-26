@@ -16,16 +16,32 @@ class Document:
         self.content = content
         self.score = score
 
-    def pprint(self, verbose: bool = False, loud: bool = False, chunker: Optional[Chunker]=None) -> str:
+    def pprint(
+        self,
+        verbose: bool = False,
+        loud: bool = False,
+        chunker: Optional[Chunker] = None,
+        rank: Optional[int] = None
+    ) -> str:
+        """Pretty print the document, optionally to console.
+
+        Args:
+            verbose: Include content in output
+            loud: Print to console using rich
+            chunker: Chunker to highlight query terms in content
+            rank: Optional rank number to prefix the output
+        """
+        rank_prefix = f"#{rank}  " if rank is not None else ""
+        content = self.content
         if verbose:
-            if chunker is not None and self.content is not None:
-                self.content = chunker.chunk_text(self.content)
-            t = f"## Document ID: {self.doc_id}\n\n**Title**: [{self.title}]({self.link})\n\n**Content**: {self.content}\n\n**Scoring**: _{self.score:.2f}_"
+            if chunker is not None and content is not None:
+                content = chunker.chunk_text(content)
+            text = f"{rank_prefix}**{self.title}**\n\n{self.link}\n\n{content}\n\nScore: {self.score:.2f}"
         else:
-            t = f"Document ID: {self.doc_id}\nTitle: {self.title}\nScore: {self.score}"
+            text = f"{rank_prefix}{self.title}\n{self.link}\nScore: {self.score:.2f}"
         if loud:
-            console.print(Markdown(t))
-        return t
+            console.print(Markdown(text))
+        return text
     
     def __eq__(self, other):
         if not isinstance(other, Document): 

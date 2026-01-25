@@ -1,3 +1,4 @@
+import os
 import unittest
 
 import numpy as np
@@ -7,6 +8,7 @@ from sea.ranking.utils import Document
 from sea.utils.config_wrapper import Config
 
 
+@unittest.skipUnless(os.path.exists("data_small"), "requires indexed data")
 class TestLTRFeatures(unittest.TestCase):
     def test_feature_vector_shape_and_finite(self):
         cfg = Config(load=True)

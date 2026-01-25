@@ -38,52 +38,54 @@ def _sample_list_for_query(
     seed: int,
     hard_pool_topk: int = 50,
 ) -> Optional[ListwiseSample]:
+    """Sample one positive and hard negatives from BM25 candidates, then extract features."""
     if list_size < 2:
         raise ValueError("list_size must be >= 2")
 
-    id_map = {}
-    for int_id, _ in id_results:
-        orig_id, _ = retriever.ranker.storage_manager.getDocMetadataEntry(int_id)
-        id_map[int_id] = orig_id
+    # Map internal IDs to original document IDs for qrels matching
+    internal_to_original_id = {}
+    for internal_id, _ in id_results:
+        storage_manager = next(iter(retriever.ranker.storage_managers.values()))
+        original_id, _ = storage_manager.getDocMetadataEntry(internal_id)
+        internal_to_original_id[internal_id] = original_id
 
-    pos_int_ids = [int_id for int_id, orig_id in id_map.items() if orig_id in positives]
-    if not pos_int_ids:
+    positive_internal_ids = [internal_id for internal_id, original_id in internal_to_original_id.items() if original_id in positives]
+    if not positive_internal_ids:
         return None
 
-    rng = random.Random((seed * 1_000_003) ^ qid)
-    pos_id = rng.choice(pos_int_ids)
+    random_generator = random.Random((seed * 1_000_003) ^ qid)
+    selected_positive_id = random_generator.choice(positive_internal_ids)
 
-    neg_int_ids = [
-        int_id for int_id, orig_id in id_map.items() if orig_id not in positives
+    negative_internal_ids = [
+        internal_id for internal_id, original_id in internal_to_original_id.items() if original_id not in positives
     ]
-    if not neg_int_ids:
+    if not negative_internal_ids:
         return None
 
-    pool = neg_int_ids[: max(1, min(hard_pool_topk, len(neg_int_ids)))]
-    num_neg = list_size - 1
+    hard_negative_pool = negative_internal_ids[:hard_pool_topk] if negative_internal_ids else []
+    num_negatives_needed = list_size - 1
 
-    if len(pool) >= num_neg:
-        negs = rng.sample(pool, num_neg)
+    if len(hard_negative_pool) >= num_negatives_needed:
+        selected_negative_ids = random_generator.sample(hard_negative_pool, num_negatives_needed)
     else:
-        negs = [rng.choice(pool) for _ in range(num_neg)]
+        selected_negative_ids = [random_generator.choice(hard_negative_pool) for _ in range(num_negatives_needed)]
 
-    # Build list of (id, score) pairs to hydrate
-    # We shuffle the list so the positive document isn't always at index 0
-    score_map = dict(id_results)
-    chosen_pairs = [(pos_id, score_map[pos_id])] + [
-        (nid, score_map[nid]) for nid in negs
+    # Build list of (id, score) pairs to hydrate and shuffle list with positive doc
+    id_to_score = dict(id_results)
+    selected_id_score_pairs = [(selected_positive_id, id_to_score[selected_positive_id])] + [
+        (negative_id, id_to_score[negative_id]) for negative_id in selected_negative_ids
     ]
-    rng.shuffle(chosen_pairs)
+    random_generator.shuffle(selected_id_score_pairs)
 
-    docs = retriever.hydrate_docs(chosen_pairs)
-    if len(docs) != list_size:
+    documents = retriever.hydrate_docs(selected_id_score_pairs)
+    if len(documents) != list_size:
         return None
 
     # 1.0 for the positive doc, 0.0 for others
     labels = np.array(
-        [1.0 if p[0] == pos_id else 0.0 for p in chosen_pairs], dtype=np.float32
+        [1.0 if pair[0] == selected_positive_id else 0.0 for pair in selected_id_score_pairs], dtype=np.float32
     )
-    features = fe.extract_many(query, docs).astype(np.float32, copy=False)
+    features = fe.extract_many(query, documents).astype(np.float32, copy=False)
     return ListwiseSample(qid=qid, features=features, labels=labels)
 
 
@@ -100,12 +102,13 @@ def iter_listwise_samples(
     max_queries: Optional[int] = None,
     description: str = "Generating samples",
 ) -> Iterator[ListwiseSample]:
+    """Stream training samples
+
+    Pipeline: query_id -> BM25 top-N doc IDs -> sample 1 positive + negatives
+    -> hydrate docs from disk -> extract features + labels
     """
-    Streams listwise samples by:
-      qid -> BM25 top-N doc IDs (Fast) -> sample 1 pos + negatives -> hydrate docs (Slow, but minimized) -> features+labels
-    """
-    n = 0
-    yielded = 0
+    queries_processed = 0
+    samples_yielded = 0
 
     total_to_check = len(qids) if isinstance(qids, list) else None
     if max_queries is not None:
@@ -113,10 +116,10 @@ def iter_listwise_samples(
             min(total_to_check, max_queries) if total_to_check else max_queries
         )
 
-    pbar = tqdm.tqdm(qids, desc=description, total=total_to_check)
+    progress_bar = tqdm.tqdm(qids, desc=description, total=total_to_check)
 
-    for qid in pbar:
-        if max_queries is not None and n >= max_queries:
+    for qid in progress_bar:
+        if max_queries is not None and queries_processed >= max_queries:
             break
         query = queries.get(qid)
         positives = qrels.get(qid)
@@ -127,7 +130,7 @@ def iter_listwise_samples(
         if not id_results:
             continue
 
-        n += 1
+        queries_processed += 1
         sample = _sample_list_for_query(
             qid=qid,
             query=query,
@@ -141,9 +144,9 @@ def iter_listwise_samples(
         if sample is None:
             continue
 
-        yielded += 1
-        if n % 5 == 0:
-            pbar.set_postfix({"hits": yielded, "recall": f"{yielded/n:.1%}"})
+        samples_yielded += 1
+        if queries_processed % 5 == 0:
+            progress_bar.set_postfix({"hits": samples_yielded, "recall": f"{samples_yielded/queries_processed:.1%}"})
         yield sample
 
 
@@ -154,10 +157,11 @@ def iter_candidate_docs_from_cache(
     candidates: dict[int, list[CandidateDoc]],
     doc_lookup: Callable,
 ) -> Iterator[tuple[int, str, list[Document]]]:
+    """Iterate over queries and their cached candidate documents"""
     for qid in qids:
-        q = queries.get(qid)
-        if q is None:
+        query = queries.get(qid)
+        if query is None:
             continue
-        cands = candidates.get(qid, [])
-        docs = [doc_lookup(c.docid, c.bm25) for c in cands]
-        yield qid, q, docs
+        candidate_docs = candidates.get(qid, [])
+        documents = [doc_lookup(candidate.docid, candidate.bm25) for candidate in candidate_docs]
+        yield qid, query, documents

@@ -1,6 +1,8 @@
+import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing as mp
 import os
+import sys
 from time import perf_counter
 from types import SimpleNamespace
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -30,7 +32,7 @@ class Ingestion:
 
     def ingest(self, num_documents: int = 1000, batch_size: int = 500, fields: Optional[List[str]] = None):
         # TODO: adjust batch size based on L1 cache size of CPU
-        if batch_size > num_documents or batch_size <= 0:
+        if num_documents > 0 and (batch_size > num_documents or batch_size <= 0):
             batch_size = num_documents
 
         metadata = dict()
@@ -45,7 +47,7 @@ class Ingestion:
         else:
             mp_ctx = mp.get_context("forkserver")
 
-         # "forkserver" on Linux/WSL; keep "spawn" on macOS/Windows
+        # "forkserver" on Linux/WSL; keep "spawn" on macOS/Windows
         counter = SimpleNamespace(value = 0)
 
         submitted = 0
@@ -54,7 +56,7 @@ class Ingestion:
 
         def submit_next(ex):
             nonlocal submitted
-            if  counter.value >= num_documents:
+            if num_documents > 0 and counter.value >= num_documents:
                 return None
             try:
                 lines = next(batch_iter)
@@ -62,10 +64,14 @@ class Ingestion:
                 return None
             fut = ex.submit(process_batch, f"{submitted}", lines)
             submitted += 1
-            print(f"Docs {counter.value:,} / {num_documents:,} submitted for processing.")
+            if num_documents > 0:
+                print(f"Docs {counter.value:,} / {num_documents:,} submitted for processing.")
+            else:
+                print(f"Docs {counter.value:,} submitted for processing.")
             return fut
 
-        print(f"Starting ingestion of {num_documents} documents from {self.document_path}...")
+        doc_msg = "all documents" if num_documents < 0 else f"{num_documents} documents"
+        print(f"Starting ingestion of {doc_msg} from {self.document_path}...")
         with open(self.document_path, "r") as f:
             batch_iter = self._chunked_lines(f, batch_size, counter)
             timings = []
@@ -91,16 +97,27 @@ class Ingestion:
                     fut = next(as_completed(pending))
                     pending.remove(fut)
 
-                    br = fut.result()
-                    timings.append(br.timings)
-                    metadata.update(br.metadata)
+                    try:
+                        br = fut.result()
+                        timings.append(br.timings)
+                        for field, field_meta in br.metadata.items():
+                            metadata.setdefault(field, {}).update(field_meta)
+                    except Exception as e:
+                        print(f"Error processing batch: {e}")
 
                     # try to submit a replacement
                     new_fut = submit_next(ex)
                     if new_fut is not None:
                         pending.add(new_fut)      
 
-            print(f"Writing metadata for {len(metadata):,} documents to disk...")
+            total_collected = (
+                sum(len(m) for m in metadata.values()) // len(metadata)
+                if metadata
+                else 0
+            )
+            print(
+                f"Collected metadata for {total_collected:,} documents across {len(metadata)} fields."
+            )
             self._write_metadata_to_disk(metadata)
             print("Metadata writing complete.")
             return max_workers, timings
@@ -181,18 +198,49 @@ def assert_doc_structure(cfg: DictConfig) -> None:
     os.makedirs(cfg.BLOCK_PATH, exist_ok=True)
     for field in cfg.SEARCH.FIELDED.FIELDS:
         os.makedirs(os.path.join(cfg.BLOCK_PATH, field), exist_ok=True)
-    
+
+
+def check_existing_index(cfg: DictConfig, fields: List[str]) -> List[str]:
+    """Check for existing index files. Returns list of existing file paths."""
+    existing = []
+    # Check for block files
+    for field in fields:
+        block_dir = os.path.join(cfg.BLOCK_PATH, field)
+        if os.path.exists(block_dir) and os.listdir(block_dir):
+            existing.append(block_dir)
+    # Check for merged index files
+    index_file = os.path.join(cfg.DATA_PATH, "index.bin")
+    if os.path.exists(index_file):
+        existing.append(index_file)
+    posting_file = os.path.join(cfg.DATA_PATH, "posting.bin")
+    if os.path.exists(posting_file):
+        existing.append(posting_file)
+    return existing
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Run document ingestion pipeline")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing index files")
+    args = parser.parse_args()
+
     start = perf_counter()
     cfg = Config(load=True)
-    ingestion = Ingestion(cfg.DOCUMENTS)
 
     if cfg.SEARCH.FIELDED.ACTIVE:
         fields = cfg.SEARCH.FIELDED.FIELDS
     else:
         fields = ["all"]
+
+    # Check for existing files
+    existing = check_existing_index(cfg, fields)
+    if existing and not args.force:
+        print("Error: Index files already exist:")
+        for path in existing:
+            print(f"  - {path}")
+        print("\nUse --force to overwrite existing files.")
+        sys.exit(1)
+
+    ingestion = Ingestion(cfg.DOCUMENTS)
     assert_doc_structure(cfg)
     no_of_terms = 0
     merge_timing = 0.0

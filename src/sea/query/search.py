@@ -37,7 +37,7 @@ def main():
         splade_encoder = SpladeEncoder(cfg=cfg)
 
     tokenizer = get_tokenizer(cfg)
-    ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RANKING)
+    ranker_builder = RankersRegistry.get_ranker(cfg.SEARCH.RETRIEVAL)
     ranker = ranker_builder()
     while True:
         try:

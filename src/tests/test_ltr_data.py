@@ -7,7 +7,9 @@ class TestLTRData(unittest.TestCase):
     def test_sample_list_for_query(self):
         # Mocking retriever and its dependencies
         mock_retriever = MagicMock()
-        mock_retriever.ranker.storage_manager.getDocMetadataEntry.side_effect = lambda int_id: (f"D{int_id}", None)
+        mock_storage = MagicMock()
+        mock_storage.getDocMetadataEntry.side_effect = lambda int_id: (f"D{int_id}", None)
+        mock_retriever.ranker.storage_managers = {"default": mock_storage}
         
         # Mock hydrate_docs to return Document objects
         def mock_hydrate(id_score_pairs):
@@ -50,7 +52,9 @@ class TestLTRData(unittest.TestCase):
 
     def test_sample_list_for_query_no_positives(self):
         mock_retriever = MagicMock()
-        mock_retriever.ranker.storage_manager.getDocMetadataEntry.side_effect = lambda int_id: (f"D{int_id}", None)
+        mock_storage = MagicMock()
+        mock_storage.getDocMetadataEntry.side_effect = lambda int_id: (f"D{int_id}", None)
+        mock_retriever.ranker.storage_managers = {"default": mock_storage}
         
         mock_fe = MagicMock()
         

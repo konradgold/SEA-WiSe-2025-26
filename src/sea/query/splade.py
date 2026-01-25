@@ -1,7 +1,7 @@
-from transformers import AutoModelForMaskedLM, AutoTokenizer
 import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer
 
-DEVICE = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+from sea.utils.device import detect_device
 
 
 class SpladeEncoder:
@@ -11,7 +11,8 @@ class SpladeEncoder:
         model_id = cfg.SPLADE.MODEL_ID if cfg else 'naver/splade-cocondenser-ensembledistil'
         self.cutoff = cfg.SPLADE.CAP_EXPANSION if cfg else 3
         cache_dir = cfg.SPLADE.CACHE_DIR if cfg else None
-        self.device = DEVICE
+        requested_device = cfg.SPLADE.DEVICE if cfg else "auto"
+        self.device = detect_device(requested_device)
         self.threshold = cfg.SPLADE.THRESHOLD if cfg else 0.0
         self.tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True, device=self.device, cache_dir=cache_dir)
         self.model = AutoModelForMaskedLM.from_pretrained(model_id, cache_dir=cache_dir).to(self.device)
@@ -41,25 +42,16 @@ class SpladeEncoder:
         sparse_dict_tokens = {
             self.idx2token[idx]: round(weight, 2) for idx, weight in zip(cols, weights)
         }
-        # sort so we can see most relevant tokens first
-        sparse_dict_tokens=  [
-            (k, v) for k, v in sorted(
-                sparse_dict_tokens.items(),
-                key=lambda item: item[1],
-                reverse=True
-            )
-            if v >= self.threshold
-        ][:take_top]
+        sorted_tokens = sorted(sparse_dict_tokens.items(), key=lambda item: item[1], reverse=True)
+        sparse_dict_tokens = [(k, v) for k, v in sorted_tokens if v >= self.threshold][:take_top]
         return sparse_dict, sparse_dict_tokens
     
     def expand(self, text: str) -> list[str]:
         _, sparse_dict_tokens = self._encode(text)
-        tokens = set(k for k, v in sparse_dict_tokens)
+        expansion_tokens = {k for k, v in sparse_dict_tokens}
         input_tokens = set(self.tokenizer.tokenize(text))
-        tokens -= input_tokens
-        tokens = list(tokens)[:self.cutoff]
-        out = tokens + text.split()
-        return out
+        new_tokens = list(expansion_tokens - input_tokens)[:self.cutoff]
+        return new_tokens + text.split()
     
     def tokenize(self, text):
         return list(self.tokenizer.tokenize(text))

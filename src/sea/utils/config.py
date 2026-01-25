@@ -39,16 +39,35 @@ class FIELDEDConfig:
         "url": 1.5
     })
 
+
+@dataclass
+class RerankerConfig:
+    ENABLED: bool = False
+    MODEL_PATH: str | None = None
+    CANDIDATE_TOPN: int = 200
+
+
+@dataclass
+class SemanticConfig:
+    SERVICE_URL: str = "http://localhost:8001"
+    SERVICE_PORT: int = 8001
+    MODEL_ID: str = "nomic-ai/nomic-embed-text-v1.5"
+    DIM: int = 64
+    DEVICE: str = "cpu"
+    BATCH_SIZE: int = 64
+
+
 @dataclass
 class SearchConfig:
     MAX_RESULTS: int = 10
     POSTINGS_CUT: int = 100000
     EXPAND_QUERIES: bool = False
-    RANKING: str = "bm25"
+    RETRIEVAL: str = "bm25"
     NUM_DOCS: int = 100000
     AVG_DOC_LEN: float = 100.0
     VERBOSE_OUTPUT: bool = False
     FIELDED: FIELDEDConfig = field(default_factory=FIELDEDConfig)
+    RERANKER: RerankerConfig = field(default_factory=RerankerConfig)
 
 @dataclass
 class BM25Config:
@@ -57,7 +76,7 @@ class BM25Config:
 
 @dataclass
 class IngestionConfig:
-    NUM_DOCUMENTS: int = 32000
+    NUM_DOCUMENTS: int = -1
     BATCH_SIZE: int = 1000
 
 @dataclass
@@ -124,6 +143,7 @@ class MainConfig:
     QUERY: QueryConfig = field(default_factory=QueryConfig)
     SPLADE: SpladeConfig = field(default_factory=SpladeConfig)
     LTR: LTRConfig = field(default_factory=LTRConfig)
+    SEMANTIC: SemanticConfig = field(default_factory=SemanticConfig)
     
     DOCUMENTS: str = "data/msmarco-docs.tsv"
     DOCUMENT_OFFSETS: str = "data/msmarco-offsets.pkl"

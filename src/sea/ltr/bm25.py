@@ -12,61 +12,66 @@ from omegaconf import DictConfig
 
 @dataclass
 class BM25Retriever:
-    """
-    Thin wrapper around the BM25 implementation for use in LTR pipelines for LTR candidate generation.
+    """Wrapper around BM25 for LTR candidate generation.
+
+    This allows retrieving more candidates for reranking.
     """
 
-    cfg: DictConfig
+    config: DictConfig
     tokenizer: TokenizerAbstract
     ranker: RankerAdapter
 
     @classmethod
-    def from_config(cls, cfg: DictConfig | None = None) -> "BM25Retriever":
-        cfg = cfg or Config(load=True)
-        tokenizer = get_tokenizer(cfg)
-        ranker = build_bm25_ranker()
-        return cls(cfg=cfg, tokenizer=tokenizer, ranker=ranker)
+    def from_config(cls, config: DictConfig | None = None, num_threads: int | None = None) -> "BM25Retriever":
+        config = config or Config(load=True)
+        tokenizer = get_tokenizer(config)
+        ranker = build_bm25_ranker(config, num_threads=num_threads)
+        return cls(config=config, tokenizer=tokenizer, ranker=ranker)
 
     def retrieve(self, query: str, *, topn: int) -> list[Document]:
+        """Retrieve top-N documents with full content loaded from disk."""
         tokens = self.tokenizer.tokenize(query)
         if not tokens:
             return []
 
-        # Override limit of top-n candidates since the other BM25 ranking truncates to `cfg.SEARCH.MAX_RESULTS`
-        inner_ranker = self.ranker.ranker
-        old_max = inner_ranker.max_results
-        inner_ranker.max_results = topn
+        # Temporarily override the result limit to get more candidates
+        original_max_results = self.ranker.max_results
+        self.ranker.max_results = topn
         try:
-            docs: list[Document] = self.ranker(tokens)
+            documents: list[Document] = self.ranker(tokens)
         finally:
-            inner_ranker.max_results = old_max
+            self.ranker.max_results = original_max_results
 
-        return docs[:topn] if topn > 0 else []
+        return documents[:topn] if topn > 0 else []
 
     def retrieve_ids(self, query: str, *, topn: int) -> list[tuple[int, float]]:
-        """Returns only (doc_id, score) tuples without reading document content from disk."""
+        """Retrieve only (document_id, score) tuples without reading content from disk."""
         tokens = self.tokenizer.tokenize(query)
         if not tokens:
             return []
 
-        token_list = self.ranker._prepare_tokens(tokens)
-        if not token_list:
+        accumulated_scores: dict[int, float] = dict()
+        for field in self.ranker.fields:
+            prepared_tokens = self.ranker._prepare_tokens(tokens, field=field)
+            if not prepared_tokens:
+                continue
+            for document_id, score in self.ranker.ranker(prepared_tokens, field=field).items():
+                accumulated_scores[document_id] = accumulated_scores.get(document_id, 0.0) + score
+
+        if not accumulated_scores:
             return []
 
-        inner_ranker = self.ranker.ranker
-        old_max = inner_ranker.max_results
-        inner_ranker.max_results = topn
-        try:
-            results = inner_ranker.rank(token_list)
-        finally:
-            inner_ranker.max_results = old_max
-
-        return results
+        sorted_results = sorted(
+            accumulated_scores.items(), key=lambda item: item[1], reverse=True
+        )[:topn]
+        return sorted_results
 
     def hydrate_docs(self, id_score_pairs: list[tuple[int, float]]) -> list[Document]:
-        """Reads document content from disk for a specific set of IDs."""
+        """Load document content from disk for a specific set of document IDs
+        """
         return self.ranker._read_documents(id_score_pairs)
 
     def retrieve_many(self, queries: Iterable[tuple[int, str]], *, topn: int):
-        for qid, qtext in queries:
-            yield qid, self.retrieve(qtext, topn=topn)
+        """Retrieve documents for multiple queries"""
+        for query_id, query_text in queries:
+            yield query_id, self.retrieve(query_text, topn=topn)

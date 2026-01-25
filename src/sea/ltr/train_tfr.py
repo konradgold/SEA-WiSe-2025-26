@@ -52,24 +52,26 @@ def _tf_dataset_from_npz(path: str, *, batch_size: int, shuffle: bool = True):
     ds = ds.prefetch(tf.data.AUTOTUNE)
     return ds
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="train_ltr")
+
+@hydra.main(version_base=None, config_path="../../../configs", config_name="train_ltr")
 def main(cfg: DictConfig) -> None:
+    """Train a TensorFlow Ranking model for document reranking"""
     cfg.SEARCH.VERBOSE_OUTPUT = False
 
-    ap = argparse.ArgumentParser(description="Train a TensorFlow Ranking reranker on MS MARCO doc ranking data.")
+    parser = argparse.ArgumentParser(description="Train a TensorFlow Ranking reranker on MS MARCO doc ranking data.")
     # TODO: Solve using hydra?
-    ap.add_argument("--no-wandb", action="store_true")
-    ap.add_argument(
+    parser.add_argument("--no-wandb", action="store_true")
+    parser.add_argument(
         "--wandb-run-name",
         type=str,
         default="tfr_reranker",
         help="Name of the Weights & Biases run.",
     )
-    args = ap.parse_args()
+    args = parser.parse_args()
 
     if not (cfg.LTR.TRAIN_CACHE and cfg.LTR.VAL_CACHE):
         if not (cfg.LTR.QUERIES and cfg.LTR.QRELS and cfg.LTR.SPLIT_DIR):
-            ap.error(
+            parser.error(
                 "Must provide --queries, --qrels, and --split-dir if caches are not provided."
             )
 
@@ -134,11 +136,11 @@ def main(cfg: DictConfig) -> None:
         )
 
     if cfg.LTR.TRAIN_CACHE:
-        train_ds = _tf_dataset_from_npz(
+        train_dataset = _tf_dataset_from_npz(
             cfg.LTR.TRAIN_CACHE, batch_size=int(cfg.LTR.BATCH_SIZE), shuffle=True
         )
     else:
-        train_ds = _tf_dataset_from_generator(
+        train_dataset = _tf_dataset_from_generator(
             train_gen,
             list_size=list_size,
             num_features=num_features,
@@ -146,11 +148,11 @@ def main(cfg: DictConfig) -> None:
         )
 
     if cfg.LTR.VAL_CACHE:
-        val_ds = _tf_dataset_from_npz(
+        validation_dataset = _tf_dataset_from_npz(
             cfg.LTR.VAL_CACHE, batch_size=int(cfg.LTR.BATCH_SIZE), shuffle=False
         )
     else:
-        val_ds = _tf_dataset_from_generator(
+        validation_dataset = _tf_dataset_from_generator(
             val_gen,
             list_size=list_size,
             num_features=num_features,
@@ -162,39 +164,42 @@ def main(cfg: DictConfig) -> None:
     dropout = getattr(model_params, "DROPOUT", 0.1)
     use_attention = getattr(model_params, "USE_ATTENTION", True)
 
-    lr_or_scheduler = float(cfg.LTR.LEARNING_RATE)
+    learning_rate_or_scheduler = float(cfg.LTR.LEARNING_RATE)
     if cfg.LTR.SCHEDULER.TYPE == "exponential":
-        lr_or_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(
+        learning_rate_or_scheduler = tf.keras.optimizers.schedules.ExponentialDecay(
             initial_learning_rate=cfg.LTR.LEARNING_RATE,
             decay_steps=cfg.LTR.SCHEDULER.DECAY_STEPS,
             decay_rate=cfg.LTR.SCHEDULER.DECAY_RATE,
         )
     elif cfg.LTR.SCHEDULER.TYPE == "cosine":
-        lr_or_scheduler = tf.keras.optimizers.schedules.CosineDecay(
+        learning_rate_or_scheduler = tf.keras.optimizers.schedules.CosineDecay(
             initial_learning_rate=cfg.LTR.LEARNING_RATE,
             decay_steps=cfg.LTR.SCHEDULER.DECAY_STEPS,
             alpha=cfg.LTR.SCHEDULER.ALPHA,
         )
 
-    model_cfg = TFRConfig(
+    model_config = TFRConfig(
         list_size=list_size,
         num_features=num_features,
-        learning_rate=lr_or_scheduler,
+        learning_rate=learning_rate_or_scheduler,
         hidden_units=hidden_units,
         dropout=dropout,
         use_attention=use_attention,
     )
-    model = build_tfr_scoring_model(model_cfg)
+    model = build_tfr_scoring_model(model_config)
 
-    adaptation_data = train_ds.take(20).map(lambda x, y: x)
+    adaptation_data = train_dataset.take(20).map(lambda x, y: x)
     model.get_layer("normalization").adapt(adaptation_data)
 
-    model = compile_tfr_model(model, learning_rate=lr_or_scheduler)
+    model = compile_tfr_model(model, learning_rate=learning_rate_or_scheduler)
 
     out_dir = Path(cfg.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "feature_names.json").write_text(json.dumps(fe.features.names, indent=2) + "\n", encoding="utf-8")
-    (out_dir / "train_args.json").write_text(json.dumps(vars(cfg), indent=2) + "\n", encoding="utf-8")
+    (out_dir / "train_args.json").write_text(
+        json.dumps(OmegaConf.to_container(cfg, resolve=True), indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     callbacks = []
     if not args.no_wandb:
@@ -205,13 +210,13 @@ def main(cfg: DictConfig) -> None:
             config=OmegaConf.to_container(cfg, resolve=True), # type: ignore
         )
         callbacks.append(WandbMetricsLogger(log_freq=cfg.log_freq))
-        checkpoint_cls = (
+        checkpoint_class = (
             WandbModelCheckpoint
             if cfg.LTR.WANDB.LOG_MODEL
             else tf.keras.callbacks.ModelCheckpoint
         )
         callbacks.append(
-            checkpoint_cls(
+            checkpoint_class(
                 filepath=str(out_dir / "best_model.keras"),
                 monitor="val_mrr@10",
                 mode="max",
@@ -223,37 +228,37 @@ def main(cfg: DictConfig) -> None:
     if not cfg.LTR.TRAIN_CACHE and cfg.limit > 0:
         steps_per_epoch = max(1, int(cfg.limit * 0.8) // int(cfg.LTR.BATCH_SIZE))
 
-    t0 = time()
-    hist = model.fit(
-        train_ds,
-        validation_data=val_ds,
+    start_time = time()
+    training_history = model.fit(
+        train_dataset,
+        validation_data=validation_dataset,
         epochs=int(cfg.LTR.EPOCHS),
         callbacks=callbacks,
         steps_per_epoch=steps_per_epoch,
         validation_steps=steps_per_epoch // 4 if steps_per_epoch else None,
     )
-    elapsed = time() - t0
+    elapsed_time = time() - start_time
 
     model_path = out_dir / "model.keras"
     model.save(model_path)
 
     # Save history for plotting
     history_path = out_dir / "history.json"
-    clean_hist = {k: [float(x) for x in v] for k, v in hist.history.items()}
-    history_path.write_text(json.dumps(clean_hist, indent=2) + "\n", encoding="utf-8")
+    serializable_history = {key: [float(value) for value in values] for key, values in training_history.history.items()}
+    history_path.write_text(json.dumps(serializable_history, indent=2) + "\n", encoding="utf-8")
 
     print(f"Saved model to {model_path}")
     print(f"Saved history to {history_path}")
-    print(f"Training time: {elapsed:.1f}s")
+    print(f"Training time: {elapsed_time:.1f}s")
 
     # Print final summary of best metrics
     print("\n" + "=" * 30)
     print("FINAL TRAINING SUMMARY")
     print("=" * 30)
-    for metric, values in clean_hist.items():
-        if metric.startswith("val_"):
-            best_val = max(values) if not metric.endswith("loss") else min(values)
-            print(f"{metric:20}: {best_val:.4f}")
+    for metric_name, metric_values in serializable_history.items():
+        if metric_name.startswith("val_"):
+            best_value = max(metric_values) if not metric_name.endswith("loss") else min(metric_values)
+            print(f"{metric_name:20}: {best_value:.4f}")
     print("=" * 30)
 
     if not args.no_wandb:

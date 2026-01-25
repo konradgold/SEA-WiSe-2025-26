@@ -11,6 +11,7 @@ class TestLTRServing(unittest.TestCase):
     def test_reranker_rerank(self, mock_fe_from_cfg, mock_retriever_from_cfg, mock_load_model):
         # Setup mocks
         mock_model = MagicMock()
+        mock_model.input_shape = (None, 100, 5)  # (batch, list_size, num_features)
         mock_load_model.return_value = mock_model
         
         mock_retriever = MagicMock()
