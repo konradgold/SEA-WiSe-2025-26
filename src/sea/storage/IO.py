@@ -205,7 +205,7 @@ class PostingListIO():
         self.posting_file.close()
 
 
-class DocDictonaryIO():
+class DocDictionaryIO():
     # BE aware of magic header when reading/writing!
     #
     # structure [uint32][uint32][bytes][uint32] -> [123][5][b'D2919'][42]
@@ -254,7 +254,7 @@ class DocDictonaryIO():
                 self.doc_dict_file.write(struct.pack("<I", token_count))
             self.doc_dict_file.flush()
         else:
-            raise RuntimeError("DocDictonaryIO opened in read-only mode (rewrite=False); cannot write. Set rewrite=True to enable writing.")
+            raise RuntimeError("DocDictionaryIO opened in read-only mode (rewrite=False); cannot write. Set rewrite=True to enable writing.")
 
     def read(self) -> Dict[int, Tuple[str, int]]:
         metadata: Dict[int, Tuple[str, int]] = {}

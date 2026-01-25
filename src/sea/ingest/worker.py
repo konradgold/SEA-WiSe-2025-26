@@ -78,13 +78,10 @@ class Worker:
     def process_batch(self, block_id: str, lines: List[Tuple[int, str]]) -> BatchResult:
         # build index and write shard on disk; return metadata for this batch
         t0 = perf_counter()
-        print(f"[{block_id}] start")
         metadata, index = self._create_batch_index(lines, self.fields)
-        print(f"[{block_id}] index built")
         t1 = perf_counter()
         for field in self.fields:
             self.blockIOs[field].write_block(block_id, index[field])
-            print(f"[{block_id}] written to disk")
         t2 = perf_counter()
 
         timings = BatchTimings(
