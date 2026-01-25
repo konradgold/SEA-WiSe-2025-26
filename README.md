@@ -1,6 +1,17 @@
 # SEA-WiSe-2025-26
 
-Search engine for MS MARCO documents with BM25/semantic retrieval and optional LTR reranking.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+
+A search engine featuring BM25 retrieval, semantic search with dense embeddings, and Learning-to-Rank reranking. Built as part of a university course on Search Engine Architecture.
+
+## Features
+
+- **Inverted Index**: Disk-based inverted index with efficient binary format
+- **BM25 Ranking**: Probabilistic ranking with fielded search support
+- **Semantic Search**: Dense retrieval using Nomic Embed transformer
+- **Learning-to-Rank**: Neural reranker using TensorFlow Ranking
+- **SPLADE Query Expansion**: Sparse neural query expansion
 
 We use [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
@@ -195,3 +206,7 @@ Run tests:
 ```bash
 uv run pytest src/tests/ -v
 ```
+
+## License
+
+This project is licensed under the MIT License, see the [LICENSE](LICENSE) file for details.

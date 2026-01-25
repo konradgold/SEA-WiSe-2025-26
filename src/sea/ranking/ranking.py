@@ -5,6 +5,14 @@ import numpy
 NUM_DOCS=3_300_000
 
 class Ranking(abc.ABC):
+    """Abstract base class for document ranking algorithms.
+
+    Subclasses implement specific ranking functions (TF-IDF, BM25, etc.)
+    that score query-document pairs based on term statistics.
+
+    Args:
+        cfg: Configuration object containing SEARCH settings and field weights.
+    """
 
     def __init__(self, cfg):
         self.num_docs = cfg.SEARCH.NUM_DOCS if cfg.SEARCH.NUM_DOCS is not None else NUM_DOCS
@@ -53,7 +61,18 @@ class TFIDFRanking(Ranking):
 
 
 class BM25Ranking(Ranking):
-    
+    """BM25 probabilistic ranking function.
+
+    Implements the BM25 algorithm. Supports fielded search with per-field weights and average document lengths.
+
+    Args:
+        cfg: Configuration object with BM25.K1, BM25.B, and field settings.
+
+    Default parameters:
+        k1: 1.5 (term frequency saturation)
+        b: 0.75 (document length normalization)
+    """
+
     def __init__(self, cfg):
         super().__init__(cfg)
         self.avg_doc_len = cfg.SEARCH.FIELDED.LENGTHS if cfg.SEARCH.FIELDED.ACTIVE else {"all": cfg.SEARCH.AVG_DOC_LEN}
